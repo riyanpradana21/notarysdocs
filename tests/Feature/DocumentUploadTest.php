@@ -21,13 +21,17 @@ class DocumentUploadTest extends TestCase
         $this->user = User::factory()->create();
     }
 
-    public function test_unauthenticated_user_cannot_upload_document(): void
+    public function test_unauthenticated_user_can_upload_document_as_guest(): void
     {
         $response = $this->post(route('documents.store'), [
             'document' => UploadedFile::fake()->create('test.pdf', 500, 'application/pdf'),
         ]);
 
-        $response->assertRedirect(route('login'));
+        $response->assertRedirect();
+        $this->assertDatabaseHas('documents', [
+            'original_filename' => 'test.pdf',
+            'user_id' => null,
+        ]);
     }
 
     public function test_rejects_invalid_file_extension(): void

@@ -175,9 +175,9 @@ class TextLayoutDetectionService
                     // Determine if list item / bullet
                     $listInfo = $this->detectListPattern($lineText);
 
-                    // Determine if header or footer based on vertical position
-                    $isHeader = ($lineYMax <= $headerThreshold);
-                    $isFooter = ($lineYMin >= $footerThreshold);
+                    // Determine if header or footer based on vertical position and text pattern
+                    $isHeader = $this->isHeaderLine($lineText, (float) $lineYMax, $headerThreshold);
+                    $isFooter = $this->isFooterLine($lineText, (float) $lineYMin, $footerThreshold, $listInfo['is_list']);
 
                     $lines[] = [
                         'xMin' => round($lineXMin, 2),
@@ -229,7 +229,62 @@ class TextLayoutDetectionService
     }
 
     /**
-     * Detect list items (numbers, letters, roman numerals, bullets).
+     * Determine if a line is a header (running header or page number in header zone).
+     */
+    protected function isHeaderLine(string $text, float $lineYMax, float $headerThreshold): bool
+    {
+        if ($lineYMax > $headerThreshold) {
+            return false;
+        }
+
+        $trimmed = trim($text);
+        if ($trimmed === '') {
+            return false;
+        }
+
+        // Header page numbers or running title indicators
+        if (preg_match('/^(\d+|Halaman\s+\d+|Page\s+\d+|-\s*\d+\s*-|Hal\.\s*\d+)$/iu', $trimmed)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Determine if a line is a footer (page number, footer label, or notary paraf in footer zone).
+     * Normal content, lists, and skill items (e.g. CSS, MySQL) must never be treated as footers!
+     */
+    protected function isFooterLine(string $text, float $lineYMin, float $footerThreshold, bool $isListItem): bool
+    {
+        if ($lineYMin < $footerThreshold) {
+            return false;
+        }
+
+        // Any list item (bullet, numbered, dashed) is body content, not a footer
+        if ($isListItem) {
+            return false;
+        }
+
+        $trimmed = trim($text);
+        if ($trimmed === '') {
+            return false;
+        }
+
+        // Dedicated footer patterns: standalone digits, page numbers, paraf
+        if (preg_match('/^(\d+|-\s*\d+\s*-|Halaman\s+\d+(\s+dari\s+\d+)?|Page\s+\d+(\s+of\s+\d+)?|Hal\.\s*\d+|\d+\s*[\/]\s*\d+|paraf(\s+notaris)?)$/iu', $trimmed)) {
+            return true;
+        }
+
+        // Short bracketed numbers, e.g. "[ 1 ]", "( 2 )"
+        if (preg_match('/^[\[\(]?\s*\d+\s*[\]\)]?$/', $trimmed)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Detect list items (numbers, letters, roman numerals, bullets, dashes, dots).
      *
      * @return array{is_list: bool, prefix: string|null}
      */
@@ -237,23 +292,24 @@ class TextLayoutDetectionService
     {
         $text = trim($text);
 
-        // Numbered list: "1.", "1)", "(1)", "1.1.", "1.1"
-        if (preg_match('/^(\d+(\.\d+)*[\.\)]|\(\d+\))\s+/u', $text, $matches)) {
+        // Bullets & symbols: "-", "•", ".", "*", "–", "—", "·", "●", "○", "■", "□", "▪", "▫"
+        // Also supports dot "." as bullet e.g. ". Next JS" or "• Next JS"
+        if (preg_match('/^([•\-\*–—·●○■□▪▫\x{2022}\x{2023}\x{25E6}\x{2043}\x{2219}]|\.(?!\d))\s*/u', $text, $matches)) {
             return ['is_list' => true, 'prefix' => trim($matches[1])];
         }
 
-        // Letter list: "a.", "A.", "a)", "A)", "(a)", "(A)"
-        if (preg_match('/^([a-zA-Z][\.\)]|\([a-zA-Z]\))\s+/u', $text, $matches)) {
+        // Numbered list: "1.", "1)", "(1)", "1.1.", "1.1", "1 -"
+        if (preg_match('/^(\d+(\.\d+)*[\.\)\-]?|\(\d+\))\s+/u', $text, $matches)) {
+            return ['is_list' => true, 'prefix' => trim($matches[1])];
+        }
+
+        // Letter list: "a.", "A.", "a)", "A)", "(a)", "(A)", "a -"
+        if (preg_match('/^([a-zA-Z][\.\)\-]|\([a-zA-Z]\))\s+/u', $text, $matches)) {
             return ['is_list' => true, 'prefix' => trim($matches[1])];
         }
 
         // Roman numerals: "i.", "ii.", "III.", "(iv)"
         if (preg_match('/^([ivxIVX]+[\.\)]|\([ivxIVX]+\))\s+/u', $text, $matches)) {
-            return ['is_list' => true, 'prefix' => trim($matches[1])];
-        }
-
-        // Bullets: "-", "•", "*", "–", "—"
-        if (preg_match('/^([•\-\*–—]|(\xC2\x95))\s+/u', $text, $matches)) {
             return ['is_list' => true, 'prefix' => trim($matches[1])];
         }
 

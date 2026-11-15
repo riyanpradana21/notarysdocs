@@ -38,7 +38,9 @@ class StampPlacementServiceTest extends TestCase
         $this->assertEquals('ROBERT, S.H., M.Kn.', $result['stamp_dimensions']['notary_name']);
         $this->assertEquals('NOTARIS KOTA DENPASAR', $result['stamp_dimensions']['city_title']);
         $this->assertEquals('#DC2626', $result['stamp_dimensions']['color']);
-        $this->assertEquals(180.0, $result['stamp_dimensions']['width']);
+        // Stamp width matches the notary name length as required
+        $this->assertGreaterThan(100.0, $result['stamp_dimensions']['width']);
+        $this->assertLessThan(160.0, $result['stamp_dimensions']['width']);
         $this->assertGreaterThan(25.0, $result['stamp_dimensions']['height']);
     }
 
@@ -58,9 +60,10 @@ class StampPlacementServiceTest extends TestCase
 
         $result = $this->service->calculatePlacements($config, $pagesData);
         $placement = $result['placements'][1];
+        $stampW = (float) $result['stamp_dimensions']['width'];
 
         // x + stampWidth must be <= pageWidth - 10
-        $this->assertLessThanOrEqual(round(595.28 - 10.0, 2), round($placement['x'] + 180.0, 2), 'Stempel tidak boleh melebihi batas kanan halaman.');
+        $this->assertLessThanOrEqual(round(595.28 - 10.0, 2), round($placement['x'] + $stampW, 2), 'Stempel tidak boleh melebihi batas kanan halaman.');
         // y + stampHeight must be <= pageHeight - 10
         $this->assertLessThanOrEqual(round(841.89 - 10.0, 2), round($placement['y'] + $result['stamp_dimensions']['height'], 2), 'Stempel tidak boleh melebihi batas bawah halaman.');
     }
@@ -103,5 +106,20 @@ class StampPlacementServiceTest extends TestCase
         $this->assertTrue($result['placements'][1]['is_active'], 'Halaman 1 harus aktif.');
         $this->assertFalse($result['placements'][2]['is_active'], 'Halaman 2 tidak boleh aktif jika target first_page.');
         $this->assertFalse($result['placements'][3]['is_active'], 'Halaman 3 tidak boleh aktif jika target first_page.');
+    }
+
+    public function test_defaults_to_top_left_preset(): void
+    {
+        $config = [];
+        $pagesData = [
+            1 => ['width' => 595.28, 'height' => 841.89, 'orientation' => 'P'],
+        ];
+
+        $result = $this->service->calculatePlacements($config, $pagesData);
+        $placement = $result['placements'][1];
+
+        // top_left default is at 8% of width and height
+        $this->assertEquals(round(595.28 * 0.08, 2), $placement['x']);
+        $this->assertEquals(round(841.89 * 0.08, 2), $placement['y']);
     }
 }

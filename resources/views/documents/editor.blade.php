@@ -118,7 +118,7 @@
                     </div>
                     <input type="range" id="draftOffset" min="2.0" max="25.0" step="0.5" value="{{ $draftConfig['offset'] ?? 8.0 }}"
                            class="w-full accent-rose-600">
-                    <p class="text-2xs text-slate-400 mt-0.5">Jarak ruang vertikal garis ke tepi kiri teks akta.</p>
+                    <p class="text-2xs text-slate-400 mt-0.5">Jarak ruang vertikal garis ke tepi kiri teks akta (dinamis mengikuti teks tanpa menumpuk).</p>
                 </div>
 
                 <!-- Paragraph Gap Threshold -->
@@ -203,9 +203,9 @@
                 <div>
                     <label class="block font-semibold text-slate-700 mb-1.5">Preset Posisi</label>
                     <div class="grid grid-cols-2 gap-2">
-                        <button type="button" class="stamp-preset-btn px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-rose-50 hover:border-rose-300 text-left transition-colors" data-preset="top_left">
-                            <span class="font-semibold block text-slate-800">Kiri Atas</span>
-                            <span class="text-2xs text-slate-400">Marjin atas dokumen</span>
+                        <button type="button" class="stamp-preset-btn px-2.5 py-1.5 rounded-lg border border-rose-300 bg-rose-50 hover:bg-rose-100 text-left transition-colors" data-preset="top_left">
+                            <span class="font-semibold block text-rose-900">Kiri Atas (Default)</span>
+                            <span class="text-2xs text-rose-600">Marjin atas dokumen</span>
                         </button>
                         <button type="button" class="stamp-preset-btn px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-rose-50 hover:border-rose-300 text-left transition-colors" data-preset="bottom_left">
                             <span class="font-semibold block text-slate-800">Kiri Bawah</span>
@@ -215,9 +215,9 @@
                             <span class="font-semibold block text-slate-800">Tengah Bawah</span>
                             <span class="text-2xs text-slate-400">Pusat kaki halaman</span>
                         </button>
-                        <button type="button" class="stamp-preset-btn px-2.5 py-1.5 rounded-lg border border-rose-300 bg-rose-50 hover:bg-rose-100 text-left transition-colors" data-preset="signature_area">
-                            <span class="font-semibold block text-rose-900">Area Tanda Tangan</span>
-                            <span class="text-2xs text-rose-600">Deteksi kata kunci</span>
+                        <button type="button" class="stamp-preset-btn px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-rose-50 hover:border-rose-300 text-left transition-colors" data-preset="signature_area">
+                            <span class="font-semibold block text-slate-800">Area Tanda Tangan</span>
+                            <span class="text-2xs text-slate-400">Deteksi kata kunci</span>
                         </button>
                     </div>
                     <p class="text-2xs text-slate-400 mt-1">Preset adalah titik awal. Anda dapat menyeret (drag-and-drop) stempel di preview untuk penempatan presisi.</p>
@@ -294,12 +294,12 @@
                     <div class="grid grid-cols-2 gap-3">
                         <div>
                             <label for="stampXPercent" class="text-2xs text-slate-500 block">Posisi X (%)</label>
-                            <input type="number" id="stampXPercent" min="0" max="95" step="0.1" value="{{ $stampConfig['x_percent'] ?? 60.0 }}"
+                            <input type="number" id="stampXPercent" min="0" max="95" step="0.1" value="{{ $stampConfig['x_percent'] ?? 8.0 }}"
                                    class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-mono">
                         </div>
                         <div>
                             <label for="stampYPercent" class="text-2xs text-slate-500 block">Posisi Y (%)</label>
-                            <input type="number" id="stampYPercent" min="0" max="95" step="0.1" value="{{ $stampConfig['y_percent'] ?? 82.0 }}"
+                            <input type="number" id="stampYPercent" min="0" max="95" step="0.1" value="{{ $stampConfig['y_percent'] ?? 8.0 }}"
                                    class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-mono">
                         </div>
                     </div>
@@ -766,14 +766,17 @@
             const lineY = placement.line_y;
             const cityY = placement.city_y;
 
-            // Element 1: Notary Name
+            const centerX = x + (stampWidth / 2);
+
+            // Element 1: Notary Name (Centered)
             stampNameText.textContent = notaryName;
-            stampNameText.setAttribute('x', x);
+            stampNameText.setAttribute('x', centerX);
             stampNameText.setAttribute('y', nameY + fontSizeName * 0.85);
             stampNameText.setAttribute('font-size', fontSizeName + 'px');
+            stampNameText.setAttribute('text-anchor', 'middle');
             stampNameText.setAttribute('fill', color);
 
-            // Element 2: Horizontal Line
+            // Element 2: Horizontal Line matching name length
             stampDividerLine.setAttribute('x1', x);
             stampDividerLine.setAttribute('y1', lineY);
             stampDividerLine.setAttribute('x2', x + stampWidth);
@@ -781,11 +784,12 @@
             stampDividerLine.setAttribute('stroke', color);
             stampDividerLine.setAttribute('stroke-width', lineThickness);
 
-            // Element 3: NOTARIS KOTA DENPASAR
+            // Element 3: NOTARIS KOTA DENPASAR (Centered)
             stampCityText.textContent = cityTitle;
-            stampCityText.setAttribute('x', x);
+            stampCityText.setAttribute('x', centerX);
             stampCityText.setAttribute('y', cityY + fontSizeCity * 0.85);
             stampCityText.setAttribute('font-size', fontSizeCity + 'px');
+            stampCityText.setAttribute('text-anchor', 'middle');
             stampCityText.setAttribute('fill', color);
 
             // Invisible grab rectangle for easy dragging
@@ -873,7 +877,7 @@
             const elementSpacing = calculatedStamp.stamp_dimensions.element_spacing;
             const lineThickness = calculatedStamp.stamp_dimensions.line_thickness;
 
-            placement.name_y = newX;
+            placement.name_y = newY;
             placement.line_y = newY + fontSizeName + elementSpacing;
             placement.city_y = placement.line_y + lineThickness + elementSpacing;
 

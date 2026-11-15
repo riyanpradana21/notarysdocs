@@ -74,4 +74,30 @@ class DocumentAuthorizationTest extends TestCase
         $response = $this->actingAs($this->otherUser)->delete(route('documents.destroy', $this->document));
         $response->assertForbidden();
     }
+
+    public function test_guest_forbidden_from_accessing_authenticated_user_document(): void
+    {
+        $response = $this->get(route('documents.editor', $this->document));
+        $response->assertForbidden();
+    }
+
+    public function test_guest_forbidden_from_another_guest_session_document(): void
+    {
+        $guestDoc = Document::create([
+            'uuid' => 'test-uuid-guest-other',
+            'user_id' => null,
+            'session_id' => 'different-session-id',
+            'title' => 'Guest Doc',
+            'original_filename' => 'guest.pdf',
+            'mime_type' => 'application/pdf',
+            'file_size' => 1024,
+            'source_type' => 'pdf',
+            'status' => 'ready',
+            'original_path' => 'documents/originals/guest.pdf',
+            'pdf_path' => 'documents/working/guest.pdf',
+        ]);
+
+        $response = $this->get(route('documents.editor', $guestDoc));
+        $response->assertForbidden();
+    }
 }

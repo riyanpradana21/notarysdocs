@@ -41,9 +41,9 @@ return [
         'element_spacing' => 4, // in points
         'target_pages' => 'first_page', // 'first_page', 'all_pages', 'custom'
         'custom_pages' => '',
-        'preset' => 'signature_area', // 'top_left', 'bottom_left', 'bottom_center', 'signature_area', 'custom'
-        'x_percent' => 60.0,
-        'y_percent' => 82.0,
+        'preset' => 'top_left', // 'top_left', 'bottom_left', 'bottom_center', 'signature_area', 'custom'
+        'x_percent' => 8.0,
+        'y_percent' => 8.0,
     ],
 
     /*
@@ -55,12 +55,12 @@ return [
         'enabled' => true,
         'color' => '#DC2626', // Red by default for notary draft
         'thickness' => 1.2, // pt
-        'offset' => 8.0, // pt distance to the left of text block
+        'offset' => 8.0, // pt distance to the left of text block (dynamically placed)
         'padding_vertical' => 1.0, // pt vertical padding for line top/bottom
         'paragraph_threshold' => 1.6, // line spacing multiplier to detect paragraph break
         'ignore_headers_footers' => true,
-        'header_margin_percent' => 7.0, // Top 7% of page considered header area
-        'footer_margin_percent' => 7.0, // Bottom 7% of page considered footer area
+        'header_margin_percent' => 5.0, // Top 5% of page considered header area
+        'footer_margin_percent' => 5.0, // Bottom 5% of page considered footer area
         'target_pages' => 'all_pages', // 'all_pages', 'first_page', 'custom'
         'custom_pages' => '',
     ],

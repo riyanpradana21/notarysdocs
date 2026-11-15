@@ -39,11 +39,22 @@ class StampPlacementService
         $fontSizeName = (float) ($stampConfig['font_size_name'] ?? 11.0);
         $fontSizeCity = (float) ($stampConfig['font_size_city'] ?? 9.0);
         $lineThickness = (float) ($stampConfig['line_thickness'] ?? 1.2);
-        $lineLength = (float) ($stampConfig['line_length'] ?? 180.0);
         $elementSpacing = (float) ($stampConfig['element_spacing'] ?? 4.0);
 
-        // Calculate stamp bounding box in points
-        $stampWidth = $lineLength;
+        // Calculate text widths in points to match line length exactly to notary name
+        $nameWidth = $this->estimateTextWidth($notaryName, $fontSizeName, 'B');
+        $cityWidth = $this->estimateTextWidth($cityTitle, $fontSizeCity, 'B');
+
+        // Line length matches the notary name length with slight padding on each end (like real stamp in Gambar 3)
+        $autoLineLength = round(max($nameWidth + 6.0, $cityWidth + 4.0), 1);
+
+        // If line_length is explicitly specified (different from default 180), respect it; otherwise match notary name
+        if (! empty($stampConfig['line_length']) && (float) $stampConfig['line_length'] > 0 && (float) $stampConfig['line_length'] !== 180.0) {
+            $stampWidth = (float) $stampConfig['line_length'];
+        } else {
+            $stampWidth = $autoLineLength;
+        }
+
         // Total height: Name text height + spacing + line thickness + spacing + City text height
         $stampHeight = $fontSizeName + $elementSpacing + $lineThickness + $elementSpacing + $fontSizeCity + 2.0;
 
@@ -53,9 +64,9 @@ class StampPlacementService
 
         $activePages = (new DraftLineService)->resolveActivePages($targetPagesRule, $customPagesStr, $totalPages);
 
-        $preset = $stampConfig['preset'] ?? 'custom';
-        $rawXPercent = (float) ($stampConfig['x_percent'] ?? 60.0);
-        $rawYPercent = (float) ($stampConfig['y_percent'] ?? 82.0);
+        $preset = $stampConfig['preset'] ?? 'top_left';
+        $rawXPercent = (float) ($stampConfig['x_percent'] ?? 8.0);
+        $rawYPercent = (float) ($stampConfig['y_percent'] ?? 8.0);
 
         $placements = [];
 
@@ -119,11 +130,43 @@ class StampPlacementService
                 'font_size_name' => $fontSizeName,
                 'font_size_city' => $fontSizeCity,
                 'line_thickness' => $lineThickness,
+                'line_length' => round($stampWidth, 2),
                 'element_spacing' => $elementSpacing,
             ],
             'target_pages' => $activePages,
             'placements' => $placements,
         ];
+    }
+
+    /**
+     * Estimate text width in points using standard Helvetica-Bold typographic metrics.
+     */
+    public function estimateTextWidth(string $text, float $fontSize, string $style = 'B'): float
+    {
+        // Standard Adobe Helvetica-Bold glyph widths per 1000 units
+        $widths = [
+            ' ' => 278, '!' => 333, '"' => 474, '#' => 556, '$' => 556, '%' => 889, '&' => 722, '\'' => 278,
+            '(' => 389, ')' => 389, '*' => 444, '+' => 610, ',' => 278, '-' => 333, '.' => 278, '/' => 278,
+            '0' => 556, '1' => 556, '2' => 556, '3' => 556, '4' => 556, '5' => 556, '6' => 556, '7' => 556,
+            '8' => 556, '9' => 556, ':' => 333, ';' => 333, '<' => 610, '=' => 610, '>' => 610, '?' => 556,
+            '@' => 975, 'A' => 722, 'B' => 722, 'C' => 722, 'D' => 722, 'E' => 667, 'F' => 610, 'G' => 778,
+            'H' => 722, 'I' => 278, 'J' => 556, 'K' => 722, 'L' => 610, 'M' => 833, 'N' => 722, 'O' => 778,
+            'P' => 667, 'Q' => 778, 'R' => 722, 'S' => 667, 'T' => 610, 'U' => 722, 'V' => 667, 'W' => 944,
+            'X' => 667, 'Y' => 667, 'Z' => 610, '[' => 389, '\\' => 278, ']' => 389, '^' => 556, '_' => 556,
+            'a' => 556, 'b' => 610, 'c' => 556, 'd' => 610, 'e' => 556, 'f' => 333, 'g' => 610, 'h' => 610,
+            'i' => 278, 'j' => 278, 'k' => 556, 'l' => 278, 'm' => 889, 'n' => 610, 'o' => 610, 'p' => 610,
+            'q' => 610, 'r' => 389, 's' => 556, 't' => 333, 'u' => 610, 'v' => 556, 'w' => 778, 'x' => 556,
+            'y' => 556, 'z' => 500,
+        ];
+
+        $totalUnits = 0;
+        $len = strlen($text);
+        for ($i = 0; $i < $len; $i++) {
+            $char = $text[$i];
+            $totalUnits += $widths[$char] ?? 600;
+        }
+
+        return ($totalUnits * $fontSize) / 1000.0;
     }
 
     /**
@@ -145,8 +188,8 @@ class StampPlacementService
         switch ($preset) {
             case 'top_left':
                 return [
-                    'x' => $pageWidth * 0.08,
-                    'y' => $pageHeight * 0.08,
+                    'x' => 24.0,
+                    'y' => 24.0,
                 ];
 
             case 'bottom_left':

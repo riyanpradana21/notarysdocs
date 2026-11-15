@@ -5,6 +5,153 @@ namespace App\Services;
 class DraftLineService
 {
     /**
+     * Determine if a line is a document section heading (e.g. "Profil Singkat", "Pendidikan").
+     * Headings must never be merged with the body text below them.
+     *
+     * Rules:
+     * - Must start at the main left margin (xMin <= 80 pt) and not be significantly indented from the column minimum.
+     * - Must be short (<=6 words, <=50 chars).
+     * - Must NOT contain URLs, email, phone numbers, or punctuation that marks body text.
+     * - Must match either a known heading keyword OR be Title/UPPER CASE with appropriate surrounding spacing.
+     * - If the next line is also a short single-word item at the same X position, it is a list — not a heading.
+     *
+     * @param  array<string, mixed>       $line
+     * @param  float                      $colMinX   Minimum X of the column this line belongs to
+     * @param  array<string, mixed>|null  $nextLine
+     * @param  array<string, mixed>|null  $prevLine
+     */
+    protected function isHeadingLine(array $line, float $colMinX, ?array $nextLine = null, ?array $prevLine = null): bool
+    {
+        $text = trim($line['text'] ?? '');
+        if ($text === '') {
+            return false;
+        }
+
+        // List items are never section headings
+        if (! empty($line['is_list_item'])) {
+            return false;
+        }
+
+        // URLs, email addresses, phone numbers, or social handles are not headings
+        if (preg_match('/(@|www\.|\.com|\.id|\.net|\.org|http|github|linkedin|\+?\d{3,})/i', $text)) {
+            return false;
+        }
+
+        // Section headings appear at the main document left margin (not deeply indented)
+        if ((float) $line['xMin'] > 80.0) {
+            return false;
+        }
+        if (((float) $line['xMin'] - $colMinX) > 6.0) {
+            return false;
+        }
+
+        $wordCount = count(preg_split('/\s+/u', $text));
+        $charLen = mb_strlen($text);
+
+        // Headings are concise
+        if ($wordCount > 6 || $charLen > 50) {
+            return false;
+        }
+
+        // Headings do not end with terminal sentence punctuation
+        if (preg_match('/[\.,;:–—\-]$/u', $text)) {
+            return false;
+        }
+
+        // If the next line is also a short 1-2 word item at the same X position, this is a
+        // vertical skill/item list — not a section heading
+        if ($nextLine !== null) {
+            $nextText = trim($nextLine['text'] ?? '');
+            $nextWordCount = count(preg_split('/\s+/u', $nextText));
+            $verticalGap = (float) ($nextLine['yMin'] - $line['yMax']);
+            if ($wordCount <= 2 && $nextWordCount <= 2
+                && $verticalGap <= 10.0
+                && abs((float) $line['xMin'] - (float) $nextLine['xMin']) < 3.0
+            ) {
+                return false;
+            }
+        }
+
+        // Known heading keywords (Indonesian and English)
+        $headingKeywords = [
+            'profil', 'pendidikan', 'pengalaman', 'kemampuan', 'keahlian', 'tentang',
+            'riwayat', 'kontak', 'data pribadi', 'informasi', 'ringkasan', 'keterangan',
+            'pasal', 'bab', 'ketentuan', 'akta', 'komparisi', 'tujuan', 'lampiran',
+            'portofolio', 'sertifikasi', 'pengantar', 'penutup', 'pembukaan',
+            'profile', 'education', 'experience', 'skills', 'summary', 'about',
+            'projects', 'contact', 'article', 'section', 'chapter', 'history',
+            'portfolio', 'certifications',
+        ];
+
+        $lower = mb_strtolower($text);
+        foreach ($headingKeywords as $kw) {
+            if ($lower === $kw
+                || str_starts_with($lower, $kw.' ')
+                || str_ends_with($lower, ' '.$kw)
+            ) {
+                return true;
+            }
+        }
+
+        // ALL-CAPS short line with 2+ words (e.g. "KEMAMPUAN UTAMA", "PASAL 1", "DATA DIRI")
+        if (preg_match('/^[A-Z0-9\s\/\&\+]{3,40}$/u', $text) && preg_match('/[A-Z]/', $text)) {
+            if ($wordCount >= 2 || preg_match('/^(PASAL|BAB|LAMPIRAN|PENUTUP|PEMBUKAAN|KOMPARISI|PREMIS|SYARAT)/iu', $text)) {
+                return true;
+            }
+        }
+
+        // Title-Case short line that is visually taller than the following body text, or
+        // has a significant whitespace gap before the next line
+        if ($nextLine !== null) {
+            $lineH = (float) ($line['yMax'] - $line['yMin']);
+            $nextH = (float) ($nextLine['yMax'] - $nextLine['yMin']);
+            $gap = (float) ($nextLine['yMin'] - $line['yMax']);
+
+            if (($lineH > $nextH + 1.0) || $gap >= 6.0) {
+                if (preg_match('/^[A-Z][a-zA-Z0-9\s\/\&\+]{2,40}$/u', $text) && $wordCount <= 4) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Determine if a line belongs to an indented bullet-list block (graphic bullet or hanging indent).
+     * Graphic bullets are drawn as vector circles ~8-12 pt to the left of the text xMin and are
+     * NOT captured by pdftotext, so the text xMin does not include the bullet marker.
+     *
+     * @param  array<string, mixed>  $line
+     * @param  float                 $colMinX  Minimum X of the column this line belongs to
+     */
+    protected function isIndentedBulletItem(array $line, float $colMinX): bool
+    {
+        // Explicit text prefix detected (•, -, 1., a.) → definitely a list item
+        if (! empty($line['is_list_item'])) {
+            return true;
+        }
+
+        // Header area lines (name, contact) are not bullet items
+        if ((float) $line['yMin'] < 130.0) {
+            return false;
+        }
+
+        // Hanging indent 12–35 pt from the column minimum X → indented bullet sub-item
+        $indent = (float) $line['xMin'] - $colMinX;
+        if ($indent >= 12.0 && $indent <= 35.0) {
+            return true;
+        }
+
+        // Secondary / tertiary multi-column body (e.g. the 2nd or 3rd skill column at x>100)
+        if ($colMinX > 100.0) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
      * Calculate dynamic vertical draft lines for each target page based on text layout.
      *
      * @param  array{pages: array<int, array>}  $layoutData
@@ -66,8 +213,14 @@ class DraftLineService
             $lines = [];
             foreach ($pageData['blocks'] ?? [] as $block) {
                 foreach ($block['lines'] ?? [] as $line) {
-                    if ($ignoreHeadersFooters && (! empty($line['is_header']) || ! empty($line['is_footer']))) {
-                        continue;
+                    if ($ignoreHeadersFooters) {
+                        if (! empty($line['is_header'])) {
+                            continue;
+                        }
+                        // Never skip list items or body text even if located near bottom
+                        if (! empty($line['is_footer']) && empty($line['is_list_item'])) {
+                            continue;
+                        }
                     }
                     if (trim($line['text'] ?? '') === '') {
                         continue;
@@ -101,6 +254,7 @@ class DraftLineService
                 $minY = null;
                 $maxY = null;
                 $firstText = '';
+                $hasExplicitMarker = false;
 
                 foreach ($group['lines'] as $gLine) {
                     $lX = (float) $gLine['xMin'];
@@ -119,14 +273,26 @@ class DraftLineService
                     if ($firstText === '') {
                         $firstText = $gLine['text'];
                     }
+                    // Track whether the list marker is a text prefix (•, -, 1.) or a graphic bullet
+                    if (! empty($gLine['is_list_item']) && trim($gLine['list_prefix'] ?? '') !== '') {
+                        $hasExplicitMarker = true;
+                    }
                 }
 
                 if ($minX === null || $minY === null || $maxY === null) {
                     continue;
                 }
 
-                // Place line to the left of the text block
-                $lineX = max(4.0, $minX - $offset);
+                // Graphic bullet circles (rendered as vector graphics, not text) sit ~10–12 pt
+                // to the left of text xMin. Add extra clearance so the draft line does not
+                // overlap the bullet. Only apply when the list marker is NOT a text character.
+                $isBulletGroup = ! empty($group['is_bullet_list']) || $group['type'] === 'list_item';
+                $effectiveOffset = ($isBulletGroup && ! $hasExplicitMarker)
+                    ? $offset + 10.0
+                    : $offset;
+
+                // Place line dynamically to the left of the actual text block
+                $lineX = max(4.0, $minX - $effectiveOffset);
                 $lineYStart = max(0.0, $minY - $verticalPadding);
                 $lineYEnd = min($pageHeight, $maxY + $verticalPadding);
 
@@ -161,11 +327,18 @@ class DraftLineService
     }
 
     /**
-     * Group lines into semantic paragraphs or list items based on vertical proximity,
-     * horizontal alignment / indentation, and list prefixes.
+     * Group lines into semantic paragraphs, list items, or section headings.
+     *
+     * Key rules applied for every column:
+     * - Section headings always form their own isolated segment (never merged with body text below).
+     * - Graphic-bullet list items (indented ≥12 pt from column minimum) are tagged `is_bullet_list`
+     *   so the caller can widen the left offset to avoid overlapping the bullet circle.
+     * - Continuation lines (wrapped text within the same item) are merged with their parent.
+     * - Centered multi-line blocks (contact info, page titles) are NOT split by X-shift.
+     * - New list markers, paragraph gaps, and significant indentation changes all trigger a new group.
      *
      * @param  list<array<string, mixed>>  $lines
-     * @return list<array{type: string, lines: list<array<string, mixed>>}>
+     * @return list<array{type: string, is_bullet_list: bool, lines: list<array<string, mixed>>}>
      */
     protected function groupLinesIntoParagraphs(array $lines, float $paragraphThreshold): array
     {
@@ -173,55 +346,187 @@ class DraftLineService
             return [];
         }
 
-        $groups = [];
-        $currentGroup = [
-            'type' => $lines[0]['is_list_item'] ? 'list_item' : 'paragraph',
-            'lines' => [$lines[0]],
-        ];
+        // Step 1: Split lines into vertical columns when side-by-side text is detected.
+        $columns = $this->splitIntoColumns($lines);
 
-        $prevLine = $lines[0];
+        $allGroups = [];
 
-        for ($i = 1; $i < count($lines); $i++) {
-            $currLine = $lines[$i];
-
-            $prevHeight = max(8.0, (float) ($prevLine['yMax'] - $prevLine['yMin']));
-            $verticalGap = (float) ($currLine['yMin'] - $prevLine['yMax']);
-
-            // Indentation difference
-            $indentDiff = (float) abs($currLine['xMin'] - $prevLine['xMin']);
-
-            // Check if current line starts a new list item
-            $isNewListItem = ! empty($currLine['is_list_item']);
-
-            // Paragraph gap threshold: if verticalGap > prevHeight * threshold
-            $isParagraphBreak = ($verticalGap > ($prevHeight * $paragraphThreshold));
-
-            // Significant indentation shift (> 25 pt) indicates a sub-list or separate column
-            $isSignificantIndent = ($indentDiff > 25.0 && $verticalGap > 2.0);
-
-            // Negative gap or big horizontal jump (multi-column or side-by-side text)
-            $isNewColumn = ($verticalGap < -2.0);
-
-            if ($isNewListItem || $isParagraphBreak || $isSignificantIndent || $isNewColumn) {
-                // Close current group and start new group
-                $groups[] = $currentGroup;
-                $currentGroup = [
-                    'type' => $isNewListItem ? 'list_item' : 'paragraph',
-                    'lines' => [$currLine],
-                ];
-            } else {
-                // Continuation of existing group
-                $currentGroup['lines'][] = $currLine;
+        foreach ($columns as $columnLines) {
+            if (empty($columnLines)) {
+                continue;
             }
 
-            $prevLine = $currLine;
+            // The leftmost X in this column defines the margin for heading/indent detection
+            $colMinX = min(array_map(fn ($l) => (float) $l['xMin'], $columnLines));
+
+            // Sort column lines top to bottom
+            usort($columnLines, fn ($a, $b) => $a['yMin'] <=> $b['yMin']);
+
+            $firstIsHeading = $this->isHeadingLine($columnLines[0], $colMinX, $columnLines[1] ?? null);
+            $firstIsBullet = $this->isIndentedBulletItem($columnLines[0], $colMinX);
+
+            $currentGroup = [
+                'type' => $firstIsBullet ? 'list_item' : ($firstIsHeading ? 'heading' : 'paragraph'),
+                'is_bullet_list' => $firstIsBullet && empty($columnLines[0]['is_list_item']),
+                'lines' => [$columnLines[0]],
+                'column_min_x' => $colMinX,
+            ];
+
+            $prevLine = $columnLines[0];
+            $prevIsHeading = $firstIsHeading;
+
+            for ($i = 1; $i < count($columnLines); $i++) {
+                $currLine = $columnLines[$i];
+                $nextLine = $columnLines[$i + 1] ?? null;
+
+                $prevHeight = max(8.0, (float) ($prevLine['yMax'] - $prevLine['yMin']));
+                $verticalGap = (float) ($currLine['yMin'] - $prevLine['yMax']);
+
+                // Check if current line starts a new explicit list item
+                $isNewListItem = ! empty($currLine['is_list_item']);
+
+                // If previous line was a list item and current line is not, it is continuation text
+                $isListContinuation = (! empty($prevLine['is_list_item']) && ! $isNewListItem);
+
+                // Centered lines (e.g. contact info spanning full width) should NOT trigger an
+                // indent-break even when xMin shifts, because centering changes xMin naturally.
+                $prevCenter = ((float) $prevLine['xMin'] + (float) $prevLine['xMax']) / 2.0;
+                $currCenter = ((float) $currLine['xMin'] + (float) $currLine['xMax']) / 2.0;
+                $linesAreCentered = (abs($prevCenter - $currCenter) < 5.0);
+
+                // Indentation shift (> 12 pt) indicates a sub-block — only when lines are NOT centered
+                $indentDiff = (float) abs($currLine['xMin'] - $prevLine['xMin']);
+                $isSignificantIndent = (! $linesAreCentered && $indentDiff > 12.0 && $verticalGap > 2.0);
+
+                // Paragraph gap threshold: if verticalGap > prevHeight * threshold
+                $isParagraphBreak = ($verticalGap > ($prevHeight * $paragraphThreshold));
+
+                // Negative gap indicates overlapping or backward jump (should not merge)
+                $isOverlapping = ($verticalGap < -2.0);
+
+                // Heading break: headings must always be their own isolated segment.
+                // If the PREVIOUS line was a heading, close it now.
+                // If the CURRENT line is a heading, also close the current group.
+                $currIsHeading = $this->isHeadingLine($currLine, $colMinX, $nextLine, $prevLine);
+                $isHeadingBreak = $prevIsHeading || $currIsHeading;
+
+                if ($isHeadingBreak || $isNewListItem || $isListContinuation || $isSignificantIndent || $isParagraphBreak || $isOverlapping) {
+                    $allGroups[] = $currentGroup;
+
+                    $currIsBullet = $this->isIndentedBulletItem($currLine, $colMinX);
+
+                    $currentGroup = [
+                        'type' => $currIsBullet ? 'list_item' : ($currIsHeading ? 'heading' : ($isListContinuation ? 'list_continuation' : 'paragraph')),
+                        'is_bullet_list' => $currIsBullet && empty($currLine['is_list_item']),
+                        'lines' => [$currLine],
+                        'column_min_x' => $colMinX,
+                    ];
+                    $prevIsHeading = $currIsHeading;
+                } else {
+                    $currentGroup['lines'][] = $currLine;
+                }
+
+                $prevLine = $currLine;
+            }
+
+            if (! empty($currentGroup['lines'])) {
+                $allGroups[] = $currentGroup;
+            }
         }
 
-        if (! empty($currentGroup['lines'])) {
-            $groups[] = $currentGroup;
+        // Sort all groups by their first line's Y position for consistent rendering
+        usort($allGroups, function ($a, $b) {
+            $aY = $a['lines'][0]['yMin'] ?? 0;
+            $bY = $b['lines'][0]['yMin'] ?? 0;
+
+            if (abs($aY - $bY) > 3.0) {
+                return $aY <=> $bY;
+            }
+
+            $aX = $a['lines'][0]['xMin'] ?? 0;
+            $bX = $b['lines'][0]['xMin'] ?? 0;
+
+            return $aX <=> $bX;
+        });
+
+        return $allGroups;
+    }
+
+    /**
+     * Split lines into vertical columns by analysing true side-by-side text (vertical overlap).
+     *
+     * Only lines that genuinely share the same vertical row (vOverlap > 3 pt) AND whose
+     * xMin values differ by more than 45 pt are considered to belong to separate columns.
+     *
+     * We deliberately do NOT use an X-gap heuristic here, because that would incorrectly
+     * split centered multi-line blocks (page title, contact info) into separate columns.
+     *
+     * @param  list<array<string, mixed>>  $lines
+     * @return list<list<array<string, mixed>>>
+     */
+    protected function splitIntoColumns(array $lines): array
+    {
+        if (count($lines) <= 1) {
+            return [$lines];
         }
 
-        return $groups;
+        // Detect column separators from lines that visually appear side-by-side
+        $columnSeparators = [];
+        $n = count($lines);
+
+        for ($i = 0; $i < $n; $i++) {
+            $a = $lines[$i];
+            for ($j = $i + 1; $j < $n; $j++) {
+                $b = $lines[$j];
+
+                // Vertical overlap: both lines exist in the same horizontal band
+                $vOverlap = min((float) $a['yMax'], (float) $b['yMax']) - max((float) $a['yMin'], (float) $b['yMin']);
+                if ($vOverlap > 3.0) {
+                    $xDiff = abs((float) $a['xMin'] - (float) $b['xMin']);
+                    if ($xDiff > 45.0) {
+                        $left = min((float) $a['xMax'], (float) $b['xMax']);
+                        $right = max((float) $a['xMin'], (float) $b['xMin']);
+                        if ($right > $left) {
+                            $columnSeparators[] = ($left + $right) / 2.0;
+                        } else {
+                            $columnSeparators[] = ((float) min($a['xMin'], $b['xMin']) + (float) max($a['xMin'], $b['xMin'])) / 2.0;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (empty($columnSeparators)) {
+            return [$lines];
+        }
+
+        sort($columnSeparators);
+
+        // Deduplicate separators that are within 30 pt of each other
+        $uniqueBreaks = [];
+        foreach ($columnSeparators as $sep) {
+            if (empty($uniqueBreaks) || ($sep - end($uniqueBreaks)) > 30.0) {
+                $uniqueBreaks[] = $sep;
+            }
+        }
+
+        // Assign each line to a column based on its xMin relative to breakpoints
+        $numColumns = count($uniqueBreaks) + 1;
+        $columns = array_fill(0, $numColumns, []);
+
+        foreach ($lines as $line) {
+            $x = (float) $line['xMin'];
+            $colIndex = 0;
+            foreach ($uniqueBreaks as $bp) {
+                if ($x > $bp) {
+                    $colIndex++;
+                }
+            }
+            $columns[$colIndex][] = $line;
+        }
+
+        // Filter out empty columns
+        return array_values(array_filter($columns, fn ($col) => ! empty($col)));
     }
 
     /**

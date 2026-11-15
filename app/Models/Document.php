@@ -18,6 +18,7 @@ class Document extends Model
     protected $fillable = [
         'uuid',
         'user_id',
+        'session_id',
         'title',
         'original_filename',
         'mime_type',

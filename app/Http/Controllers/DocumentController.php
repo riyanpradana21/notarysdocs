@@ -37,15 +37,19 @@ class DocumentController extends Controller
     public function index(): View
     {
         $user = Auth::user();
-        $totalDocs = $user->documents()->count();
-        $readyDocs = $user->documents()->where('status', 'ready')->count();
-        $processingDocs = $user->documents()->whereIn('status', ['uploaded', 'processing'])->count();
-        $failedDocs = $user->documents()->where('status', 'failed')->count();
+        $query = $user
+            ? $user->documents()
+            : Document::whereNull('user_id')->where('session_id', session()->getId());
 
-        $totalBytes = (int) $user->documents()->sum('file_size');
+        $totalDocs = (clone $query)->count();
+        $readyDocs = (clone $query)->where('status', 'ready')->count();
+        $processingDocs = (clone $query)->whereIn('status', ['uploaded', 'processing'])->count();
+        $failedDocs = (clone $query)->where('status', 'failed')->count();
+
+        $totalBytes = (int) (clone $query)->sum('file_size');
         $storageUsedFormatted = $this->formatBytes($totalBytes);
 
-        $recentDocuments = $user->documents()
+        $recentDocuments = (clone $query)
             ->latest()
             ->take(8)
             ->get();
@@ -66,7 +70,9 @@ class DocumentController extends Controller
     public function history(Request $request): View
     {
         $user = Auth::user();
-        $query = $user->documents()->latest();
+        $query = $user
+            ? $user->documents()->latest()
+            : Document::whereNull('user_id')->where('session_id', session()->getId())->latest();
 
         if ($request->filled('search')) {
             $search = '%'.trim($request->input('search')).'%';
@@ -136,9 +142,13 @@ class DocumentController extends Controller
         // Store original privately
         Storage::disk('local')->putFileAs('documents/originals', $file, "{$uuid}.{$extension}");
 
+        $userId = Auth::id();
+        $sessionId = $userId ? null : $request->session()->getId();
+
         $document = Document::create([
             'uuid' => $uuid,
-            'user_id' => Auth::id(),
+            'user_id' => $userId,
+            'session_id' => $sessionId,
             'title' => $title,
             'original_filename' => $originalFilename,
             'mime_type' => $mimeType,

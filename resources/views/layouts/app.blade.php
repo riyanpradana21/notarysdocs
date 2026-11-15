@@ -32,25 +32,28 @@
                     </a>
 
                     <!-- Nav Links -->
-                    @auth
                     <nav class="hidden md:flex space-x-1">
-                        <a href="{{ route('dashboard') }}" class="px-3 py-2 rounded-md text-sm font-medium transition-colors {{ request()->routeIs('dashboard') ? 'bg-slate-100 text-rose-700 font-semibold' : 'text-slate-640 hover:text-slate-900 hover:bg-slate-50' }}">
+                        <a href="{{ route('dashboard') }}" class="px-3 py-2 rounded-md text-sm font-medium transition-colors {{ request()->routeIs('dashboard') ? 'bg-slate-100 text-rose-700 font-semibold' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50' }}">
                             Dashboard
                         </a>
-                        <a href="{{ route('documents.upload') }}" class="px-3 py-2 rounded-md text-sm font-medium transition-colors {{ request()->routeIs('documents.upload') ? 'bg-slate-100 text-rose-700 font-semibold' : 'text-slate-640 hover:text-slate-900 hover:bg-slate-50' }}">
+                        <a href="{{ route('documents.upload') }}" class="px-3 py-2 rounded-md text-sm font-medium transition-colors {{ request()->routeIs('documents.upload') ? 'bg-slate-100 text-rose-700 font-semibold' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50' }}">
                             Unggah Dokumen
                         </a>
-                        <a href="{{ route('documents.history') }}" class="px-3 py-2 rounded-md text-sm font-medium transition-colors {{ request()->routeIs('documents.history') ? 'bg-slate-100 text-rose-700 font-semibold' : 'text-slate-640 hover:text-slate-900 hover:bg-slate-50' }}">
+                        @auth
+                        <a href="{{ route('documents.history') }}" class="px-3 py-2 rounded-md text-sm font-medium transition-colors {{ request()->routeIs('documents.history') ? 'bg-slate-100 text-rose-700 font-semibold' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50' }}">
                             Riwayat Dokumen
                         </a>
+                        @endauth
                     </nav>
-                    @endauth
                 </div>
 
                 <!-- Right: User / Auth -->
                 <div class="flex items-center space-x-3">
                     @auth
                         <div class="flex items-center space-x-3 border-l border-slate-200 pl-4">
+                            @if (Auth::user()->avatar)
+                                <img src="{{ Auth::user()->avatar }}" alt="{{ Auth::user()->name }}" class="w-8 h-8 rounded-full border border-slate-200 object-cover shrink-0">
+                            @endif
                             <div class="text-right hidden sm:block">
                                 <div class="text-sm font-semibold text-slate-800 leading-tight">{{ Auth::user()->name }}</div>
                                 <div class="text-xs text-slate-500">{{ Auth::user()->email }}</div>
@@ -66,7 +69,7 @@
                         </div>
                     @else
                         <a href="{{ route('login') }}" class="text-sm font-medium text-slate-600 hover:text-slate-900">Masuk</a>
-                        <a href="{{ route('register') }}" class="ml-2 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-rose-600 hover:bg-rose-700">Daftar</a>
+                        <a href="{{ route('register') }}" class="ml-2 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-rose-600 hover:bg-rose-700 shadow-xs">Daftar</a>
                     @endauth
                 </div>
             </div>

@@ -110,19 +110,19 @@ class PdfRenderingService
                         $lineY = (float) $placement['line_y'];
                         $cityY = (float) $placement['city_y'];
 
-                        // Element 1: Notary Name (Bold Red Text)
+                        // Element 1: Notary Name (Bold Red Text, Centered)
                         $pdf->SetFont('Helvetica', 'B', $fontSizeName);
                         $pdf->SetXY($x, $nameY);
-                        $pdf->Cell($stampWidth, $fontSizeName, $notaryName, 0, 0, 'L');
+                        $pdf->Cell($stampWidth, $fontSizeName, $notaryName, 0, 0, 'C');
 
-                        // Element 2: Single Horizontal Red Line from Left to Right
+                        // Element 2: Single Horizontal Red Line from Left to Right (matching name length)
                         $pdf->SetLineWidth($stampLineThickness);
                         $pdf->Line($x, $lineY, $x + $stampWidth, $lineY);
 
-                        // Element 3: NOTARIS KOTA DENPASAR (Bold Red Text below line)
+                        // Element 3: NOTARIS KOTA DENPASAR (Bold Red Text below line, Centered)
                         $pdf->SetFont('Helvetica', 'B', $fontSizeCity);
                         $pdf->SetXY($x, $cityY);
-                        $pdf->Cell($stampWidth, $fontSizeCity, $cityTitle, 0, 0, 'L');
+                        $pdf->Cell($stampWidth, $fontSizeCity, $cityTitle, 0, 0, 'C');
                     }
                 }
             }
