@@ -37,16 +37,6 @@
                 <span class="hidden sm:inline">Simpan</span>
             </button>
 
-            <!-- Mobile only (< md): Toggle Config Panel button -->
-            <button type="button" id="mobileConfigToggle"
-                class="md:hidden inline-flex items-center space-x-1 px-2 sm:px-2.5 py-1.5 rounded-lg border border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100 transition-colors shadow-2xs text-xs font-semibold"
-                title="Buka Konfigurasi Draf & Stempel">
-                <svg class="w-3.5 h-3.5 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
-                </svg>
-                <span>Atur</span>
-            </button>
-
             <button type="button" id="generatePdfBtn" class="inline-flex items-center px-2 sm:px-4 py-1.5 rounded-lg text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 shadow-sm shadow-rose-200 transition-colors">
                 <svg id="generateSpinner" class="hidden animate-spin -ml-0.5 sm:-ml-1 mr-1 sm:mr-1.5 h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
                     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -71,27 +61,8 @@
 
     <!-- Main Workspace (Split View) -->
     <div class="flex-1 flex overflow-hidden relative">
-        <!-- Backdrop overlay for mobile drawer -->
-        <div id="mobileBackdrop" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-40 hidden md:hidden transition-opacity"></div>
-
-        <!-- Left Panel: Configuration Tabs (drawer on mobile < md, normal static sidebar on desktop >= md) -->
-        <div id="configPanel"
-             class="fixed inset-y-0 left-0 z-50 w-84 max-w-[85vw] bg-white border-r border-slate-200 flex flex-col shadow-2xl transition-transform duration-300 ease-in-out -translate-x-full
-                    md:relative md:inset-auto md:z-10 md:w-80 md:translate-x-0 md:shadow-none md:transition-none">
-            <!-- Mobile panel header with close button (only visible on mobile < md) -->
-            <div class="flex items-center justify-between px-4 py-3 border-b border-slate-200 md:hidden bg-slate-50">
-                <span class="text-xs font-bold text-slate-800 flex items-center">
-                    <svg class="w-4 h-4 mr-1.5 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
-                    </svg>
-                    Konfigurasi Draf & Stempel
-                </span>
-                <button type="button" id="closeMobilePanel" class="p-1.5 text-slate-500 hover:text-slate-800 rounded-lg hover:bg-slate-200 transition-colors" title="Tutup">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                </button>
-            </div>
+        <!-- Left Panel: Configuration Tabs (Static Split-View) -->
+        <div id="configPanel" class="w-80 bg-white border-r border-slate-200 flex flex-col shrink-0">
             <!-- Tabs Header -->
             <div class="flex border-b border-slate-200 bg-slate-50/70 p-1">
                 <button type="button" id="tabDraftBtn" class="flex-1 py-2 text-xs font-semibold rounded-lg text-rose-700 bg-white shadow-2xs transition-all">
@@ -535,12 +506,6 @@
     const tabDraftContent = document.getElementById('tabDraftContent');
     const tabStampContent = document.getElementById('tabStampContent');
 
-    // Mobile panel elements
-    const configPanel = document.getElementById('configPanel');
-    const mobileConfigToggle = document.getElementById('mobileConfigToggle');
-    const closeMobilePanel = document.getElementById('closeMobilePanel');
-    const mobileBackdrop = document.getElementById('mobileBackdrop');
-
     // Inputs: Draft Lines
     const draftEnabled = document.getElementById('draftEnabled');
     const draftColor = document.getElementById('draftColor');
@@ -591,26 +556,6 @@
     const generateIcon = document.getElementById('generateIcon');
     const downloadBtn = document.getElementById('downloadBtn');
     const saveStatus = document.getElementById('saveStatus');
-
-    // 0. Mobile Config Panel Toggle & Backdrop
-    function openMobilePanel() {
-        if (configPanel) configPanel.classList.remove('-translate-x-full');
-        if (mobileBackdrop) mobileBackdrop.classList.remove('hidden');
-        document.body.style.overflow = 'hidden';
-    }
-    function closeMobilePanelFn() {
-        if (configPanel) configPanel.classList.add('-translate-x-full');
-        if (mobileBackdrop) mobileBackdrop.classList.add('hidden');
-        document.body.style.overflow = '';
-    }
-    if (mobileConfigToggle) mobileConfigToggle.addEventListener('click', openMobilePanel);
-    if (closeMobilePanel) closeMobilePanel.addEventListener('click', closeMobilePanelFn);
-    if (mobileBackdrop) mobileBackdrop.addEventListener('click', closeMobilePanelFn);
-    window.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && configPanel && !configPanel.classList.contains('-translate-x-full')) {
-            closeMobilePanelFn();
-        }
-    });
 
     // 1. Initialize Tabs
     tabDraftBtn.addEventListener('click', () => {
