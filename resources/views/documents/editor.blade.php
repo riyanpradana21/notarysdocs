@@ -476,8 +476,8 @@
 @push('scripts')
 <!-- Load PDF.js Module -->
 <script type="module">
-    import * as pdfjsLib from '{{ asset("vendor/pdfjs/pdf.min.mjs") }}';
-    pdfjsLib.GlobalWorkerOptions.workerSrc = '{{ asset("vendor/pdfjs/pdf.worker.min.mjs") }}';
+    import * as pdfjsLib from '{{ asset("vendor/pdfjs/pdf.min.js") }}';
+    pdfjsLib.GlobalWorkerOptions.workerSrc = '{{ asset("vendor/pdfjs/pdf.worker.min.js") }}';
 
     // Application State passed from Backend
     const PDF_STREAM_URL = '{{ route("documents.stream", $document) }}';
@@ -586,12 +586,6 @@
     const generateIcon = document.getElementById('generateIcon');
     const downloadBtn = document.getElementById('downloadBtn');
     const saveStatus = document.getElementById('saveStatus');
-
-    // Mobile panel elements
-    const configPanel = document.getElementById('configPanel');
-    const mobileConfigToggle = document.getElementById('mobileConfigToggle');
-    const closeMobilePanel = document.getElementById('closeMobilePanel');
-    const mobileBackdrop = document.getElementById('mobileBackdrop');
 
     // 0. Mobile Config Panel Toggle & Backdrop
     function openMobilePanel() {
@@ -750,27 +744,39 @@
         return Math.max(0.25, Math.min(3.0, containerWidth / unscaledWidth));
     }
 
-    // 2. Load PDF via PDF.js (local stream, no external CDN latency)
-    pdfjsLib.getDocument({
-        url: PDF_STREAM_URL,
-    }).promise.then(doc => {
-        pdfDoc = doc;
-        totalPages = doc.numPages;
-        totalPagesText.textContent = totalPages;
-        currentPageInput.max = totalPages;
+    // 2. Load PDF via PDF.js using ArrayBuffer (reliable across all browsers and devices)
+    fetch(PDF_STREAM_URL, { credentials: 'same-origin' })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            return response.arrayBuffer();
+        })
+        .then(arrayBuffer => {
+            return pdfjsLib.getDocument({
+                data: arrayBuffer,
+            }).promise;
+        })
+        .then(doc => {
+            pdfDoc = doc;
+            totalPages = doc.numPages;
+            totalPagesText.textContent = totalPages;
+            currentPageInput.max = totalPages;
 
-        return doc.getPage(1);
-    }).then(firstPage => {
-        const unscaled = firstPage.getViewport({ scale: 1.0 });
-        if (window.innerWidth < 1024) {
-            currentScale = calculateFitWidthScale(unscaled.width);
-            zoomLevelText.textContent = Math.round(currentScale * 100) + '%';
-        }
-        renderPage(1);
-    }).catch(err => {
-        console.error('Error loading PDF:', err);
-        canvasLoader.innerHTML = `<div class="p-4 text-center"><span class="text-xs text-rose-600 font-semibold block">Gagal memuat file PDF</span><span class="text-2xs text-slate-500 mt-1 block">${err.message}</span></div>`;
-    });
+            return doc.getPage(1);
+        })
+        .then(firstPage => {
+            const unscaled = firstPage.getViewport({ scale: 1.0 });
+            if (window.innerWidth < 1024) {
+                currentScale = calculateFitWidthScale(unscaled.width);
+                zoomLevelText.textContent = Math.round(currentScale * 100) + '%';
+            }
+            renderPage(1);
+        })
+        .catch(err => {
+            console.error('Error loading PDF:', err);
+            canvasLoader.innerHTML = `<div class="p-4 text-center"><span class="text-xs text-rose-600 font-semibold block">Gagal memuat file PDF</span><span class="text-2xs text-slate-500 mt-1 block">${err.message || 'Silakan refresh halaman'}</span></div>`;
+        });
 
     // Window resize handler for mobile responsiveness (debounced)
     window.addEventListener('resize', debounce(() => {
@@ -779,9 +785,12 @@
         }
     }, 300));
 
-    // 3. Render Page with cancellation guard
+    // 3. Render Page with cancellation guard & safety timeout
+    let renderTimeout = null;
     function renderPage(pageNum) {
         if (!pdfDoc) return;
+
+        if (renderTimeout) clearTimeout(renderTimeout);
 
         // Cleanly cancel previous in-flight render task if any
         if (currentRenderTask) {
@@ -791,6 +800,15 @@
 
         isRendering = true;
         canvasLoader.classList.remove('hidden');
+
+        // Safety watchdog: Automatically dismiss loader if rendering hangs beyond 8s
+        renderTimeout = setTimeout(() => {
+            if (isRendering) {
+                console.warn('PDF rendering timeout exceeded, removing loader overlay.');
+                isRendering = false;
+                canvasLoader.classList.add('hidden');
+            }
+        }, 8000);
 
         pdfDoc.getPage(pageNum).then(page => {
             const viewport = page.getViewport({ scale: currentScale });
@@ -823,6 +841,7 @@
             currentRenderTask = page.render(renderContext);
 
             currentRenderTask.promise.then(() => {
+                if (renderTimeout) clearTimeout(renderTimeout);
                 currentRenderTask = null;
                 isRendering = false;
                 canvasLoader.classList.add('hidden');
@@ -840,12 +859,14 @@
                     // Normal: previous render was cancelled for a new scale or page
                     return;
                 }
+                if (renderTimeout) clearTimeout(renderTimeout);
                 console.error('Render page error:', err);
                 currentRenderTask = null;
                 isRendering = false;
                 canvasLoader.classList.add('hidden');
             });
         }).catch(err => {
+            if (renderTimeout) clearTimeout(renderTimeout);
             console.error('Get page error:', err);
             isRendering = false;
             canvasLoader.classList.add('hidden');

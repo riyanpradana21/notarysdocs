@@ -71,6 +71,14 @@ class DocumentConversionService
      */
     protected function convertDocxToPdf(string $docxPath, string $outputPdfPath): void
     {
+        if (! function_exists('proc_open')) {
+            throw new RuntimeException(
+                'Fungsi PHP "proc_open" dinonaktifkan pada server hosting Anda (cPanel). ' .
+                'Konversi otomatis file DOCX/Word membutuhkan proc_open dan LibreOffice. ' .
+                'Solusi: Silakan unggah dokumen langsung dalam format PDF, atau aktifkan proc_open melalui menu cPanel PHP Options / MultiPHP INI Editor.'
+            );
+        }
+
         $libreOfficeBinary = config('notary.libreoffice_binary');
         if (! file_exists($libreOfficeBinary)) {
             // Check fallback standard paths
@@ -79,6 +87,8 @@ class DocumentConversionService
                 'C:\\Program Files (x86)\\LibreOffice\\program\\soffice.exe',
                 'soffice',
                 'libreoffice',
+                '/usr/bin/soffice',
+                '/usr/bin/libreoffice',
             ];
             $found = false;
             foreach ($fallbacks as $fallback) {
@@ -178,31 +188,35 @@ class DocumentConversionService
     {
         $pdfinfoBinary = config('notary.poppler_pdfinfo');
 
-        if (file_exists($pdfinfoBinary)) {
-            $process = new Process([$pdfinfoBinary, $pdfPath]);
-            $process->setTimeout(15);
-            $process->run();
+        if (function_exists('proc_open') && ! empty($pdfinfoBinary) && file_exists($pdfinfoBinary)) {
+            try {
+                $process = new Process([$pdfinfoBinary, $pdfPath]);
+                $process->setTimeout(15);
+                $process->run();
 
-            $output = $process->getOutput();
-            $errorOutput = $process->getErrorOutput();
+                $output = $process->getOutput();
+                $errorOutput = $process->getErrorOutput();
 
-            // Check encrypted
-            $isEncrypted = false;
-            if (preg_match('/Encrypted:\s+yes/i', $output) || stripos($errorOutput, 'encrypted') !== false || stripos($errorOutput, 'password') !== false) {
-                $isEncrypted = true;
-            }
+                // Check encrypted
+                $isEncrypted = false;
+                if (preg_match('/Encrypted:\s+yes/i', $output) || stripos($errorOutput, 'encrypted') !== false || stripos($errorOutput, 'password') !== false) {
+                    $isEncrypted = true;
+                }
 
-            // Check pages
-            $pages = 0;
-            if (preg_match('/Pages:\s+(\d+)/i', $output, $matches)) {
-                $pages = (int) $matches[1];
-            }
+                // Check pages
+                $pages = 0;
+                if (preg_match('/Pages:\s+(\d+)/i', $output, $matches)) {
+                    $pages = (int) $matches[1];
+                }
 
-            if ($pages > 0 || $isEncrypted) {
-                return [
-                    'page_count' => $pages,
-                    'is_encrypted' => $isEncrypted,
-                ];
+                if ($pages > 0 || $isEncrypted) {
+                    return [
+                        'page_count' => $pages,
+                        'is_encrypted' => $isEncrypted,
+                    ];
+                }
+            } catch (\Throwable $e) {
+                Log::warning('pdfinfo execution failed, falling back to pure FPDI: '.$e->getMessage());
             }
         }
 

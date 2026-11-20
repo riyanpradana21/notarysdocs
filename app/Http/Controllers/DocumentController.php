@@ -173,9 +173,11 @@ class DocumentController extends Controller
                 'status' => 'ready',
                 'page_count' => $meta['page_count'] ?: count($layoutData['pages']),
                 'layout_data' => $layoutData,
-                'error_message' => $layoutData['is_scanned']
-                    ? 'Catatan: Dokumen ini terdeteksi memiliki sedikit teks atau berupa hasil scan. Garis draft otomatis memerlukan lapisan teks digital.'
-                    : null,
+                'error_message' => ! empty($layoutData['fallback_mode'])
+                    ? 'Catatan: Server hosting tidak memiliki utilitas Poppler pdftotext (atau proc_open nonaktif). Anda tetap dapat menempatkan stempel notaris dan mengatur garis draf secara leluasa.'
+                    : ($layoutData['is_scanned']
+                        ? 'Catatan: Dokumen ini terdeteksi memiliki sedikit teks atau berupa hasil scan. Garis draft otomatis memerlukan lapisan teks digital.'
+                        : null),
             ]);
         } catch (Exception $e) {
             Log::error("Document processing failed for UUID {$uuid}: ".$e->getMessage());
@@ -247,7 +249,8 @@ class DocumentController extends Controller
         return response()->file($absPath, [
             'Content-Type' => 'application/pdf',
             'Content-Disposition' => 'inline; filename="'.addslashes(pathinfo($document->original_filename, PATHINFO_FILENAME)).'.pdf"',
-            'Cache-Control' => 'private, no-cache, no-store, must-revalidate',
+            'Accept-Ranges' => 'bytes',
+            'Cache-Control' => 'private, max-age=600, must-revalidate',
         ]);
     }
 
@@ -266,7 +269,8 @@ class DocumentController extends Controller
         return response()->file($absPath, [
             'Content-Type' => 'application/pdf',
             'Content-Disposition' => 'inline; filename="'.addslashes($document->title).'_final.pdf"',
-            'Cache-Control' => 'private, no-cache, no-store, must-revalidate',
+            'Accept-Ranges' => 'bytes',
+            'Cache-Control' => 'private, max-age=600, must-revalidate',
         ]);
     }
 

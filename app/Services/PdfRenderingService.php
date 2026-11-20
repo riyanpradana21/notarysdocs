@@ -64,7 +64,7 @@ class PdfRenderingService
         $stampWidth = (float) $calculatedStamp['stamp_dimensions']['width'];
 
         try {
-            $pdf = new Fpdi('P', 'pt');
+            $pdf = new NotaryFpdi('P', 'pt');
             $pdf->SetAutoPageBreak(false);
 
             $pageCount = $pdf->setSourceFile($sourcePdfPath);
@@ -85,33 +85,25 @@ class PdfRenderingService
                     $pdf->SetDrawColor($draftRgb['r'], $draftRgb['g'], $draftRgb['b']);
                     $pdf->SetLineWidth($draftThickness);
 
+                    // Set native PDF dash pattern (instant rendering & lightweight PDF)
+                    if ($lineStyle === 'dashed') {
+                        $pdf->setDash($dashLength, $dashGap);
+                    } else {
+                        $pdf->setDash();
+                    }
+
                     foreach ($calculatedDraftLines[$pageNo]['segments'] as $seg) {
                         $x = (float) $seg['x'];
-                        $y1 = (float) $seg['y_start'];
-                        $y2 = (float) $seg['y_end'];
-
-                        // Clamp to page
-                        $y1 = max(0.0, min($pageHeight, $y1));
-                        $y2 = max(0.0, min($pageHeight, $y2));
+                        $y1 = max(0.0, min($pageHeight, (float) $seg['y_start']));
+                        $y2 = max(0.0, min($pageHeight, (float) $seg['y_end']));
 
                         if ($y2 > $y1) {
-                            if ($lineStyle === 'dashed') {
-                                // Draw dashed vertical line manually using short segments
-                                $y = $y1;
-                                $drawing = true;
-                                while ($y < $y2) {
-                                    $segEnd = min($y + ($drawing ? $dashLength : $dashGap), $y2);
-                                    if ($drawing) {
-                                        $pdf->Line($x, $y, $x, $segEnd);
-                                    }
-                                    $y = $segEnd;
-                                    $drawing = ! $drawing;
-                                }
-                            } else {
-                                $pdf->Line($x, $y1, $x, $y2);
-                            }
+                            $pdf->Line($x, $y1, $x, $y2);
                         }
                     }
+
+                    // Reset to solid line for subsequent elements
+                    $pdf->setDash();
                 }
 
                 // --- 2. Draw Notary Stamp if active on this page ---
