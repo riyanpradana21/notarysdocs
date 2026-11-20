@@ -474,10 +474,15 @@
 @endsection
 
 @push('scripts')
-<!-- Load PDF.js Module -->
-<script type="module">
-    import * as pdfjsLib from '{{ asset("vendor/pdfjs/pdf.min.js") }}';
-    pdfjsLib.GlobalWorkerOptions.workerSrc = '{{ asset("vendor/pdfjs/pdf.worker.min.js") }}';
+<!-- Load PDF.js from Cloudflare CDN (Universally supported on cPanel & local) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+    if (window.pdfjsLib) {
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+</script>
+<script>
+    const pdfjsLib = window.pdfjsLib;
 
     // Application State passed from Backend
     const PDF_STREAM_URL = '{{ route("documents.stream", $document) }}';
