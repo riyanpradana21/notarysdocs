@@ -37,9 +37,9 @@
                 <span class="hidden sm:inline">Simpan</span>
             </button>
 
-            <!-- Mobile & Tablet: Toggle Config Panel button -->
+            <!-- Mobile only (< md): Toggle Config Panel button -->
             <button type="button" id="mobileConfigToggle"
-                class="lg:hidden inline-flex items-center space-x-1 px-2 sm:px-2.5 py-1.5 rounded-lg border border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100 transition-colors shadow-2xs text-xs font-semibold"
+                class="md:hidden inline-flex items-center space-x-1 px-2 sm:px-2.5 py-1.5 rounded-lg border border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100 transition-colors shadow-2xs text-xs font-semibold"
                 title="Buka Konfigurasi Draf & Stempel">
                 <svg class="w-3.5 h-3.5 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
@@ -71,15 +71,15 @@
 
     <!-- Main Workspace (Split View) -->
     <div class="flex-1 flex overflow-hidden relative">
-        <!-- Backdrop overlay for mobile & tablet drawer -->
-        <div id="mobileBackdrop" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-40 hidden lg:hidden transition-opacity"></div>
+        <!-- Backdrop overlay for mobile drawer -->
+        <div id="mobileBackdrop" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-40 hidden md:hidden transition-opacity"></div>
 
-        <!-- Left Panel: Configuration Tabs (drawer on screens < lg, normal static sidebar on desktop >= lg) -->
+        <!-- Left Panel: Configuration Tabs (drawer on mobile < md, normal static sidebar on desktop >= md) -->
         <div id="configPanel"
              class="fixed inset-y-0 left-0 z-50 w-84 max-w-[85vw] bg-white border-r border-slate-200 flex flex-col shadow-2xl transition-transform duration-300 ease-in-out -translate-x-full
-                    lg:relative lg:inset-auto lg:z-10 lg:w-80 lg:translate-x-0 lg:shadow-none lg:transition-none">
-            <!-- Mobile panel header with close button (only visible on mobile & tablet screens) -->
-            <div class="flex items-center justify-between px-4 py-3 border-b border-slate-200 lg:hidden bg-slate-50">
+                    md:relative md:inset-auto md:z-10 md:w-80 md:translate-x-0 md:shadow-none md:transition-none">
+            <!-- Mobile panel header with close button (only visible on mobile < md) -->
+            <div class="flex items-center justify-between px-4 py-3 border-b border-slate-200 md:hidden bg-slate-50">
                 <span class="text-xs font-bold text-slate-800 flex items-center">
                     <svg class="w-4 h-4 mr-1.5 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
@@ -768,6 +768,12 @@
             totalPagesText.textContent = totalPages;
             currentPageInput.max = totalPages;
 
+            // If layout data is missing from backend (e.g. cPanel without proc_open), extract via PDF.js!
+            const needsLayout = !rawLayoutData || rawLayoutData.fallback_mode || !rawLayoutData.pages || !rawLayoutData.pages[1] || !rawLayoutData.pages[1].blocks || rawLayoutData.pages[1].blocks.length === 0;
+            if (needsLayout) {
+                extractAndSyncLayout(doc);
+            }
+
             return doc.getPage(1);
         })
         .then(firstPage => {
@@ -782,6 +788,136 @@
             console.error('Error loading PDF:', err);
             canvasLoader.innerHTML = `<div class="p-4 text-center"><span class="text-xs text-rose-600 font-semibold block">Gagal memuat file PDF</span><span class="text-2xs text-slate-500 mt-1 block">${err.message || 'Silakan refresh halaman'}</span></div>`;
         });
+
+    // Auto extract layout from PDF.js client-side if server hosting does not have poppler/proc_open
+    async function extractAndSyncLayout(doc) {
+        try {
+            const pages = {};
+            for (let p = 1; p <= doc.numPages; p++) {
+                const page = await doc.getPage(p);
+                const unscaled = page.getViewport({ scale: 1.0 });
+                const textContent = await page.getTextContent();
+
+                const lineMap = new Map();
+                const yTolerance = 4.0;
+
+                for (const item of textContent.items) {
+                    const str = item.str;
+                    if (!str || !str.trim()) continue;
+
+                    const tx = item.transform[4];
+                    const ty = unscaled.height - item.transform[5] - (item.height || 10);
+                    const w = item.width || 0;
+                    const h = item.height || 10;
+
+                    let foundKey = null;
+                    for (const key of lineMap.keys()) {
+                        if (Math.abs(key - ty) <= yTolerance) {
+                            foundKey = key;
+                            break;
+                        }
+                    }
+
+                    const targetKey = foundKey !== null ? foundKey : ty;
+                    if (!lineMap.has(targetKey)) {
+                        lineMap.set(targetKey, []);
+                    }
+                    lineMap.get(targetKey).push({
+                        xMin: tx,
+                        yMin: ty,
+                        xMax: tx + w,
+                        yMax: ty + h,
+                        text: str
+                    });
+                }
+
+                const sortedYKeys = Array.from(lineMap.keys()).sort((a, b) => a - b);
+                const lines = [];
+                let blockMinX = 999999, blockMinY = 999999, blockMaxX = 0, blockMaxY = 0;
+
+                for (const yKey of sortedYKeys) {
+                    const items = lineMap.get(yKey).sort((a, b) => a.xMin - b.xMin);
+                    const lineXMin = items[0].xMin;
+                    const lineXMax = items[items.length - 1].xMax;
+                    const lineYMin = Math.min(...items.map(it => it.yMin));
+                    const lineYMax = Math.max(...items.map(it => it.yMax));
+                    const lineText = items.map(it => it.text).join(' ');
+
+                    blockMinX = Math.min(blockMinX, lineXMin);
+                    blockMinY = Math.min(blockMinY, lineYMin);
+                    blockMaxX = Math.max(blockMaxX, lineXMax);
+                    blockMaxY = Math.max(blockMaxY, lineYMax);
+
+                    lines.push({
+                        xMin: Math.round(lineXMin * 100) / 100,
+                        yMin: Math.round(lineYMin * 100) / 100,
+                        xMax: Math.round(lineXMax * 100) / 100,
+                        yMax: Math.round(lineYMax * 100) / 100,
+                        text: lineText,
+                        is_list_item: /^[\u2022\u25cf\-\*]|\d+[\.\)]|[a-zA-Z][\.\)]/u.test(lineText.trim()),
+                        is_header: lineYMin < 50,
+                        is_footer: lineYMin > (unscaled.height - 50)
+                    });
+                }
+
+                pages[p] = {
+                    page_number: p,
+                    width: Math.round(unscaled.width * 100) / 100,
+                    height: Math.round(unscaled.height * 100) / 100,
+                    orientation: unscaled.width > unscaled.height ? 'L' : 'P',
+                    word_count: lines.length,
+                    line_count: lines.length,
+                    is_scanned: lines.length === 0,
+                    blocks: lines.length > 0 ? [{
+                        xMin: Math.round(blockMinX * 100) / 100,
+                        yMin: Math.round(blockMinY * 100) / 100,
+                        xMax: Math.round(blockMaxX * 100) / 100,
+                        yMax: Math.round(blockMaxY * 100) / 100,
+                        lines: lines
+                    }] : []
+                };
+            }
+
+            const clientLayout = {
+                page_count: doc.numPages,
+                is_scanned: false,
+                fallback_mode: false,
+                pages: pages
+            };
+
+            const response = await fetch(CONFIG_UPDATE_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                    'Accept': 'application/json',
+                },
+                body: JSON.stringify({
+                    layout_data: clientLayout,
+                    draft_lines: draftConfig,
+                    stamp: stampConfig,
+                }),
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                if (data.draft_lines) {
+                    calculatedDraftLines = data.draft_lines;
+                }
+                if (data.stamp) {
+                    calculatedStamp = data.stamp;
+                }
+                const warningEl = document.querySelector('.bg-amber-50');
+                if (warningEl) warningEl.remove();
+
+                const curPageObj = await doc.getPage(currentPage);
+                const unscaledCur = curPageObj.getViewport({ scale: 1.0 });
+                updateOverlayVisuals(currentPage, unscaledCur.width, unscaledCur.height);
+            }
+        } catch (err) {
+            console.warn('Auto client-side text layout extraction notice:', err);
+        }
+    }
 
     // Window resize handler for mobile responsiveness (debounced)
     window.addEventListener('resize', debounce(() => {

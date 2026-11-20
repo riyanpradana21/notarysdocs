@@ -302,6 +302,7 @@ class DocumentController extends Controller
         Gate::authorize('update', $document);
 
         $validated = $request->validate([
+            'layout_data' => ['nullable', 'array'],
             'draft_lines' => ['nullable', 'array'],
             'draft_lines.enabled' => ['nullable', 'boolean'],
             'draft_lines.color' => ['nullable', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
@@ -337,10 +338,19 @@ class DocumentController extends Controller
         $mergedDraft = array_merge($currentDraft, $validated['draft_lines'] ?? []);
         $mergedStamp = array_merge($currentStamp, $validated['stamp'] ?? []);
 
-        $document->update([
+        $updatePayload = [
             'draft_line_config' => $mergedDraft,
             'stamp_config' => $mergedStamp,
-        ]);
+        ];
+
+        if (! empty($validated['layout_data']) && ! empty($validated['layout_data']['pages'])) {
+            $updatePayload['layout_data'] = $validated['layout_data'];
+            $updatePayload['error_message'] = null;
+            $document->layout_data = $validated['layout_data'];
+            $document->error_message = null;
+        }
+
+        $document->update($updatePayload);
 
         $layoutData = $document->layout_data ?? ['pages' => []];
         $calculatedDraftLines = $this->draftLineService->calculateDraftLines($layoutData, $mergedDraft);
