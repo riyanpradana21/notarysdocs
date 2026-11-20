@@ -216,8 +216,8 @@ class DocumentController extends Controller
         Gate::authorize('view', $document);
 
         $layoutData = $document->layout_data ?? ['pages' => []];
-        $draftConfig = $document->draft_line_config ?? config('notary.default_draft_lines');
-        $stampConfig = $document->stamp_config ?? config('notary.default_stamp');
+        $draftConfig = array_merge(config('notary.default_draft_lines'), $document->draft_line_config ?? []);
+        $stampConfig = array_merge(config('notary.default_stamp'), $document->stamp_config ?? []);
 
         $calculatedDraftLines = $this->draftLineService->calculateDraftLines($layoutData, $draftConfig);
         $calculatedStamp = $this->stampPlacementService->calculatePlacements($stampConfig, $layoutData['pages'] ?? []);
@@ -307,6 +307,9 @@ class DocumentController extends Controller
             'draft_lines.ignore_headers_footers' => ['nullable', 'boolean'],
             'draft_lines.target_pages' => ['nullable', 'string', 'in:all_pages,first_page,custom'],
             'draft_lines.custom_pages' => ['nullable', 'string', 'max:100'],
+            'draft_lines.line_style' => ['nullable', 'string', 'in:solid,dashed'],
+            'draft_lines.dash_length' => ['nullable', 'numeric', 'min:1.0', 'max:20.0'],
+            'draft_lines.dash_gap' => ['nullable', 'numeric', 'min:1.0', 'max:20.0'],
 
             'stamp' => ['nullable', 'array'],
             'stamp.notary_name' => ['nullable', 'string', 'max:120'],

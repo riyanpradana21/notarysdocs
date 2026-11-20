@@ -3,65 +3,95 @@
 @section('content')
 <div class="h-[calc(100vh-4.1rem)] flex flex-col bg-slate-100 overflow-hidden">
     <!-- Top Action Toolbar -->
-    <div class="bg-white border-b border-slate-200 px-4 py-2.5 flex items-center justify-between shrink-0 z-30">
-        <div class="flex items-center space-x-3 truncate">
-            <a href="{{ route('dashboard') }}" class="p-1.5 text-slate-400 hover:text-slate-800 rounded-lg hover:bg-slate-100 transition-colors" title="Kembali">
+    <div class="bg-white border-b border-slate-200 px-2 sm:px-4 py-2 sm:py-2.5 flex items-center justify-between shrink-0 z-30">
+        <div class="flex items-center space-x-1.5 sm:space-x-3 truncate min-w-0 mr-1 sm:mr-3">
+            <a href="{{ route('dashboard') }}" class="p-1 sm:p-1.5 text-slate-400 hover:text-slate-800 rounded-lg hover:bg-slate-100 transition-colors shrink-0" title="Kembali ke Dashboard">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
                 </svg>
             </a>
-            <div class="truncate">
-                <div class="flex items-center space-x-2">
-                    <h1 class="text-sm font-bold text-slate-900 truncate">{{ $document->title }}</h1>
-                    <span class="inline-flex items-center px-1.5 py-0.5 rounded text-2xs font-bold uppercase tracking-wider {{ $document->source_type === 'pdf' ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-blue-50 text-blue-700 border border-blue-200' }}">
+            <div class="truncate min-w-0">
+                <div class="flex items-center space-x-1 sm:space-x-2 min-w-0">
+                    <h1 class="text-xs sm:text-sm font-bold text-slate-900 truncate max-w-[110px] xs:max-w-[150px] sm:max-w-xs md:max-w-md">{{ $document->title }}</h1>
+                    <span class="inline-flex items-center px-1 py-0.5 rounded text-2xs font-bold uppercase tracking-wider shrink-0 {{ $document->source_type === 'pdf' ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-blue-50 text-blue-700 border border-blue-200' }}">
                         {{ $document->source_type }}
                     </span>
                     @if ($document->hasFinalPdf())
-                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-2xs font-semibold bg-emerald-100 text-emerald-800">
-                            PDF Final Siap
+                        <span class="hidden md:inline-flex items-center px-2 py-0.5 rounded-full text-2xs font-semibold bg-emerald-100 text-emerald-800 shrink-0">
+                            PDF Siap
                         </span>
                     @endif
                 </div>
-                <div class="text-xs text-slate-400 truncate">{{ $document->original_filename }} &bull; {{ $document->page_count }} Halaman</div>
+                <div class="text-xs text-slate-400 truncate hidden sm:block">{{ $document->original_filename }} &bull; {{ $document->page_count }} Halaman</div>
             </div>
         </div>
 
         <!-- Action Buttons -->
-        <div class="flex items-center space-x-2">
-            <span id="saveStatus" class="hidden text-xs text-slate-400 italic mr-2 sm:inline">Tersimpan otomatis</span>
+        <div class="flex items-center space-x-1 sm:space-x-2 shrink-0">
+            <span id="saveStatus" class="hidden text-xs text-slate-400 italic mr-1 sm:mr-2 sm:inline">Tersimpan otomatis</span>
 
-            <button type="button" id="saveConfigBtn" class="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 shadow-2xs transition-colors">
-                <svg class="w-3.5 h-3.5 mr-1 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+            <button type="button" id="saveConfigBtn" class="inline-flex items-center px-2 sm:px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 shadow-2xs transition-colors" title="Simpan Konfigurasi">
+                <svg class="w-3.5 h-3.5 sm:mr-1 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
                 </svg>
-                Simpan
+                <span class="hidden sm:inline">Simpan</span>
             </button>
 
-            <button type="button" id="generatePdfBtn" class="inline-flex items-center px-4 py-1.5 rounded-lg text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 shadow-sm shadow-rose-200 transition-colors">
-                <svg id="generateSpinner" class="hidden animate-spin -ml-1 mr-1.5 h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
+            <!-- Mobile & Tablet: Toggle Config Panel button -->
+            <button type="button" id="mobileConfigToggle"
+                class="lg:hidden inline-flex items-center space-x-1 px-2 sm:px-2.5 py-1.5 rounded-lg border border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100 transition-colors shadow-2xs text-xs font-semibold"
+                title="Buka Konfigurasi Draf & Stempel">
+                <svg class="w-3.5 h-3.5 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
+                </svg>
+                <span>Atur</span>
+            </button>
+
+            <button type="button" id="generatePdfBtn" class="inline-flex items-center px-2 sm:px-4 py-1.5 rounded-lg text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 shadow-sm shadow-rose-200 transition-colors">
+                <svg id="generateSpinner" class="hidden animate-spin -ml-0.5 sm:-ml-1 mr-1 sm:mr-1.5 h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
                     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                     <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
                 </svg>
-                <svg id="generateIcon" class="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                <svg id="generateIcon" class="w-3.5 h-3.5 sm:mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
                 </svg>
-                <span id="generateBtnText">Generate PDF Final</span>
+                <span id="generateBtnText" class="hidden sm:inline">Generate PDF Final</span>
+                <span class="sm:hidden">Generate</span>
             </button>
 
             <a id="downloadBtn" href="{{ route('documents.download', $document) }}"
-               class="{{ $document->hasFinalPdf() ? 'inline-flex' : 'hidden' }} items-center px-3 py-1.5 rounded-lg text-xs font-semibold text-emerald-800 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 transition-colors">
-                <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+               class="{{ $document->hasFinalPdf() ? 'inline-flex' : 'hidden' }} items-center px-2 sm:px-3 py-1.5 rounded-lg text-xs font-semibold text-emerald-800 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 transition-colors">
+                <svg class="w-3.5 h-3.5 sm:mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
                 </svg>
-                Unduh PDF
+                <span class="hidden sm:inline">Unduh PDF</span>
             </a>
         </div>
     </div>
 
     <!-- Main Workspace (Split View) -->
-    <div class="flex-1 flex overflow-hidden">
-        <!-- Left Panel: Configuration Tabs -->
-        <div class="w-80 md:w-96 bg-white border-r border-slate-200 flex flex-col shrink-0 z-20 shadow-xs">
+    <div class="flex-1 flex overflow-hidden relative">
+        <!-- Backdrop overlay for mobile & tablet drawer -->
+        <div id="mobileBackdrop" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-40 hidden lg:hidden transition-opacity"></div>
+
+        <!-- Left Panel: Configuration Tabs (drawer on screens < lg, normal static sidebar on desktop >= lg) -->
+        <div id="configPanel"
+             class="fixed inset-y-0 left-0 z-50 w-84 max-w-[85vw] bg-white border-r border-slate-200 flex flex-col shadow-2xl transition-transform duration-300 ease-in-out -translate-x-full
+                    lg:relative lg:inset-auto lg:z-10 lg:w-80 lg:translate-x-0 lg:shadow-none lg:transition-none">
+            <!-- Mobile panel header with close button (only visible on mobile & tablet screens) -->
+            <div class="flex items-center justify-between px-4 py-3 border-b border-slate-200 lg:hidden bg-slate-50">
+                <span class="text-xs font-bold text-slate-800 flex items-center">
+                    <svg class="w-4 h-4 mr-1.5 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
+                    </svg>
+                    Konfigurasi Draf & Stempel
+                </span>
+                <button type="button" id="closeMobilePanel" class="p-1.5 text-slate-500 hover:text-slate-800 rounded-lg hover:bg-slate-200 transition-colors" title="Tutup">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
             <!-- Tabs Header -->
             <div class="flex border-b border-slate-200 bg-slate-50/70 p-1">
                 <button type="button" id="tabDraftBtn" class="flex-1 py-2 text-xs font-semibold rounded-lg text-rose-700 bg-white shadow-2xs transition-all">
@@ -139,6 +169,46 @@
                         <span class="text-2xs text-slate-400">Tidak menggambar garis pada nomor halaman atas/bawah</span>
                     </div>
                     <input type="checkbox" id="draftIgnoreHeaderFooter" class="h-4 w-4 text-rose-600 rounded border-slate-300" {{ ($draftConfig['ignore_headers_footers'] ?? true) ? 'checked' : '' }}>
+                </div>
+
+                <!-- Line Style: Solid or Dashed -->
+                <div class="pt-2 border-t border-slate-200">
+                    <label class="block font-semibold text-slate-700 mb-1.5">Gaya Garis</label>
+                    <div class="flex space-x-2">
+                        <button type="button" id="lineStyleSolid"
+                            class="flex-1 py-1.5 rounded-lg border text-xs font-semibold transition-colors
+                                {{ ($draftConfig['line_style'] ?? 'dashed') === 'solid' ? 'bg-rose-600 text-white border-rose-600' : 'bg-white text-slate-700 border-slate-300 hover:border-rose-400' }}">
+                            <svg class="w-14 h-3 mx-auto" viewBox="0 0 56 12"><line x1="2" y1="6" x2="54" y2="6" stroke="currentColor" stroke-width="2"/></svg>
+                            Solid
+                        </button>
+                        <button type="button" id="lineStyleDashed"
+                            class="flex-1 py-1.5 rounded-lg border text-xs font-semibold transition-colors
+                                {{ ($draftConfig['line_style'] ?? 'dashed') === 'dashed' ? 'bg-rose-600 text-white border-rose-600' : 'bg-white text-slate-700 border-slate-300 hover:border-rose-400' }}">
+                            <svg class="w-14 h-3 mx-auto" viewBox="0 0 56 12"><line x1="2" y1="6" x2="54" y2="6" stroke="currentColor" stroke-width="2" stroke-dasharray="6 4"/></svg>
+                            Putus-putus
+                        </button>
+                    </div>
+                    <input type="hidden" id="draftLineStyle" value="{{ $draftConfig['line_style'] ?? 'dashed' }}">
+                </div>
+
+                <!-- Dash Size Controls (shown only when dashed) -->
+                <div id="dashControls" class="{{ ($draftConfig['line_style'] ?? 'dashed') === 'solid' ? 'hidden' : '' }} space-y-2">
+                    <div>
+                        <div class="flex justify-between items-center mb-1">
+                            <label for="dashLength" class="font-semibold text-slate-700">Panjang Garis Putus</label>
+                            <span id="dashLengthVal" class="font-mono text-slate-500 font-semibold">{{ $draftConfig['dash_length'] ?? 4.0 }} pt</span>
+                        </div>
+                        <input type="range" id="dashLength" min="2" max="12" step="0.5" value="{{ $draftConfig['dash_length'] ?? 4.0 }}"
+                               class="w-full accent-rose-600">
+                    </div>
+                    <div>
+                        <div class="flex justify-between items-center mb-1">
+                            <label for="dashGap" class="font-semibold text-slate-700">Jarak antar Garis</label>
+                            <span id="dashGapVal" class="font-mono text-slate-500 font-semibold">{{ $draftConfig['dash_gap'] ?? 3.0 }} pt</span>
+                        </div>
+                        <input type="range" id="dashGap" min="1" max="10" step="0.5" value="{{ $draftConfig['dash_gap'] ?? 3.0 }}"
+                               class="w-full accent-rose-600">
+                    </div>
                 </div>
 
                 <!-- Page Selection for Draft Lines -->
@@ -309,43 +379,43 @@
         </div>
 
         <!-- Right Panel: Interactive PDF.js Canvas & SVG Overlay -->
-        <div class="flex-1 flex flex-col bg-slate-200/90 overflow-hidden">
+        <div class="flex-1 flex flex-col min-w-0 bg-slate-200/90 overflow-hidden">
             <!-- Viewer Toolbar -->
-            <div class="bg-white/95 backdrop-blur-xs border-b border-slate-200 px-4 py-2 flex items-center justify-between shrink-0 shadow-2xs z-10">
+            <div class="bg-white/95 backdrop-blur-xs border-b border-slate-200 px-2 sm:px-4 py-1.5 sm:py-2 flex items-center justify-between shrink-0 shadow-2xs z-10">
                 <!-- Page Navigation -->
-                <div class="flex items-center space-x-2">
-                    <button type="button" id="prevPageBtn" class="p-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">
-                        <svg class="w-4 h-4 text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                <div class="flex items-center space-x-1 sm:space-x-1.5">
+                    <button type="button" id="prevPageBtn" class="p-1 sm:p-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed" title="Halaman Sebelumnya">
+                        <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
                         </svg>
                     </button>
-                    <div class="flex items-center space-x-1.5 text-xs font-medium text-slate-700">
-                        <span>Halaman</span>
+                    <div class="flex items-center space-x-0.5 sm:space-x-1 text-xs font-medium text-slate-700">
+                        <span class="hidden sm:inline">Halaman</span>
                         <input type="number" id="currentPageInput" min="1" max="{{ $document->page_count }}" value="1"
-                               class="w-12 px-1.5 py-1 text-center font-mono text-xs border border-slate-300 rounded-md">
-                        <span>dari <span id="totalPagesText">{{ $document->page_count }}</span></span>
+                               class="w-8 sm:w-12 px-1 py-0.5 sm:py-1 text-center font-mono text-xs border border-slate-300 rounded-md">
+                        <span>/<span id="totalPagesText">{{ $document->page_count }}</span></span>
                     </div>
-                    <button type="button" id="nextPageBtn" class="p-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">
-                        <svg class="w-4 h-4 text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                    <button type="button" id="nextPageBtn" class="p-1 sm:p-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed" title="Halaman Berikutnya">
+                        <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
                         </svg>
                     </button>
                 </div>
 
                 <!-- Zoom Controls -->
-                <div class="flex items-center space-x-2">
-                    <button type="button" id="zoomOutBtn" class="p-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50">
-                        <svg class="w-4 h-4 text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                <div class="flex items-center space-x-1 sm:space-x-2">
+                    <button type="button" id="zoomOutBtn" class="p-1 sm:p-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50" title="Perkecil">
+                        <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 12h-15" />
                         </svg>
                     </button>
-                    <span id="zoomLevelText" class="text-xs font-mono font-medium text-slate-700 min-w-12 text-center">100%</span>
-                    <button type="button" id="zoomInBtn" class="p-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50">
-                        <svg class="w-4 h-4 text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                    <span id="zoomLevelText" class="text-xs font-mono font-medium text-slate-700 min-w-8 sm:min-w-12 text-center">100%</span>
+                    <button type="button" id="zoomInBtn" class="p-1 sm:p-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50" title="Perbesar">
+                        <svg class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                         </svg>
                     </button>
-                    <button type="button" id="fitWidthBtn" class="px-2.5 py-1 text-xs font-medium rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700">
+                    <button type="button" id="fitWidthBtn" class="px-1.5 sm:px-2.5 py-1 text-2xs sm:text-xs font-medium rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 shadow-2xs whitespace-nowrap" title="Sesuaikan dengan lebar layar">
                         Pas Lebar
                     </button>
                 </div>
@@ -364,9 +434,9 @@
             @endif
 
             <!-- PDF Viewer Stage Container -->
-            <div id="viewerScrollContainer" class="flex-1 overflow-auto p-4 sm:p-8 flex justify-center items-start">
+            <div id="viewerScrollContainer" class="flex-1 overflow-auto p-2 sm:p-6 md:p-8 flex justify-center items-start">
                 <!-- Wrapper for Canvas & Overlay -->
-                <div id="pageStage" class="relative bg-white shadow-xl rounded-sm transition-transform duration-75">
+                <div id="pageStage" class="relative bg-white shadow-xl rounded-sm transition-transform duration-75 min-w-[260px] min-h-[360px]">
                     <!-- PDF.js Canvas -->
                     <canvas id="pdfCanvas" class="block"></canvas>
 
@@ -416,6 +486,9 @@
 
     const rawLayoutData = @json($layoutData);
     let draftConfig = @json($draftConfig);
+    draftConfig.line_style = draftConfig.line_style || 'dashed';
+    draftConfig.dash_length = draftConfig.dash_length ? parseFloat(draftConfig.dash_length) : 4.0;
+    draftConfig.dash_gap = draftConfig.dash_gap ? parseFloat(draftConfig.dash_gap) : 3.0;
     let stampConfig = @json($stampConfig);
     let calculatedDraftLines = @json($calculatedDraftLines);
     let calculatedStamp = @json($calculatedStamp);
@@ -426,6 +499,7 @@
     let currentScale = 1.0;
     let isRendering = false;
     let renderPending = null;
+    let currentRenderTask = null;
 
     // DOM References
     const pdfCanvas = document.getElementById('pdfCanvas');
@@ -456,6 +530,12 @@
     const tabDraftContent = document.getElementById('tabDraftContent');
     const tabStampContent = document.getElementById('tabStampContent');
 
+    // Mobile panel elements
+    const configPanel = document.getElementById('configPanel');
+    const mobileConfigToggle = document.getElementById('mobileConfigToggle');
+    const closeMobilePanel = document.getElementById('closeMobilePanel');
+    const mobileBackdrop = document.getElementById('mobileBackdrop');
+
     // Inputs: Draft Lines
     const draftEnabled = document.getElementById('draftEnabled');
     const draftColor = document.getElementById('draftColor');
@@ -470,6 +550,14 @@
     const draftTargetPages = document.getElementById('draftTargetPages');
     const draftCustomPagesBox = document.getElementById('draftCustomPagesBox');
     const draftCustomPages = document.getElementById('draftCustomPages');
+    const draftLineStyle = document.getElementById('draftLineStyle');
+    const lineStyleSolid = document.getElementById('lineStyleSolid');
+    const lineStyleDashed = document.getElementById('lineStyleDashed');
+    const dashControls = document.getElementById('dashControls');
+    const dashLength = document.getElementById('dashLength');
+    const dashLengthVal = document.getElementById('dashLengthVal');
+    const dashGap = document.getElementById('dashGap');
+    const dashGapVal = document.getElementById('dashGapVal');
 
     // Inputs: Stamp
     const stampNotaryName = document.getElementById('stampNotaryName');
@@ -498,6 +586,32 @@
     const generateIcon = document.getElementById('generateIcon');
     const downloadBtn = document.getElementById('downloadBtn');
     const saveStatus = document.getElementById('saveStatus');
+
+    // Mobile panel elements
+    const configPanel = document.getElementById('configPanel');
+    const mobileConfigToggle = document.getElementById('mobileConfigToggle');
+    const closeMobilePanel = document.getElementById('closeMobilePanel');
+    const mobileBackdrop = document.getElementById('mobileBackdrop');
+
+    // 0. Mobile Config Panel Toggle & Backdrop
+    function openMobilePanel() {
+        if (configPanel) configPanel.classList.remove('-translate-x-full');
+        if (mobileBackdrop) mobileBackdrop.classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+    }
+    function closeMobilePanelFn() {
+        if (configPanel) configPanel.classList.add('-translate-x-full');
+        if (mobileBackdrop) mobileBackdrop.classList.add('hidden');
+        document.body.style.overflow = '';
+    }
+    if (mobileConfigToggle) mobileConfigToggle.addEventListener('click', openMobilePanel);
+    if (closeMobilePanel) closeMobilePanel.addEventListener('click', closeMobilePanelFn);
+    if (mobileBackdrop) mobileBackdrop.addEventListener('click', closeMobilePanelFn);
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && configPanel && !configPanel.classList.contains('-translate-x-full')) {
+            closeMobilePanelFn();
+        }
+    });
 
     // 1. Initialize Tabs
     tabDraftBtn.addEventListener('click', () => {
@@ -559,6 +673,36 @@
     });
     draftCustomPages.addEventListener('input', debounce(onDraftConfigChanged, 500));
 
+    // Line style toggle (solid vs dashed)
+    function setLineStyleUI(style) {
+        draftLineStyle.value = style;
+        const isDashed = style === 'dashed';
+        const activeClasses = ['bg-rose-600', 'text-white', 'border-rose-600'];
+        const inactiveClasses = ['bg-white', 'text-slate-700', 'border-slate-300'];
+        // Solid button
+        lineStyleSolid.classList.toggle('bg-rose-600', !isDashed);
+        lineStyleSolid.classList.toggle('text-white', !isDashed);
+        lineStyleSolid.classList.toggle('border-rose-600', !isDashed);
+        lineStyleSolid.classList.toggle('bg-white', isDashed);
+        lineStyleSolid.classList.toggle('text-slate-700', isDashed);
+        lineStyleSolid.classList.toggle('border-slate-300', isDashed);
+        // Dashed button
+        lineStyleDashed.classList.toggle('bg-rose-600', isDashed);
+        lineStyleDashed.classList.toggle('text-white', isDashed);
+        lineStyleDashed.classList.toggle('border-rose-600', isDashed);
+        lineStyleDashed.classList.toggle('bg-white', !isDashed);
+        lineStyleDashed.classList.toggle('text-slate-700', !isDashed);
+        lineStyleDashed.classList.toggle('border-slate-300', !isDashed);
+        // Show/hide dash controls
+        dashControls.classList.toggle('hidden', !isDashed);
+    }
+    if (lineStyleSolid) lineStyleSolid.addEventListener('click', () => { setLineStyleUI('solid'); onDraftConfigChanged(); });
+    if (lineStyleDashed) lineStyleDashed.addEventListener('click', () => { setLineStyleUI('dashed'); onDraftConfigChanged(); });
+    if (dashLength) dashLength.addEventListener('input', (e) => { dashLengthVal.textContent = e.target.value + ' pt'; onDraftConfigChanged(); });
+    if (dashGap) dashGap.addEventListener('input', (e) => { dashGapVal.textContent = e.target.value + ' pt'; onDraftConfigChanged(); });
+    // Initialize line style buttons UI based on initial configuration
+    setLineStyleUI(draftConfig.line_style || 'dashed');
+
     // Stamp sliders
     stampNotaryName.addEventListener('input', onStampConfigChanged);
     stampCityTitle.addEventListener('input', onStampConfigChanged);
@@ -599,25 +743,52 @@
         });
     });
 
-    // 2. Load PDF via PDF.js
+    // Helper to calculate fit-to-width scale based on current container width
+    function calculateFitWidthScale(unscaledWidth) {
+        const horizontalPadding = window.innerWidth < 640 ? 16 : 48;
+        const containerWidth = Math.max(180, (viewerScrollContainer.clientWidth || window.innerWidth) - horizontalPadding);
+        return Math.max(0.25, Math.min(3.0, containerWidth / unscaledWidth));
+    }
+
+    // 2. Load PDF via PDF.js (local stream, no external CDN latency)
     pdfjsLib.getDocument({
         url: PDF_STREAM_URL,
-        cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/cmaps/',
-        cMapPacked: true,
     }).promise.then(doc => {
         pdfDoc = doc;
         totalPages = doc.numPages;
         totalPagesText.textContent = totalPages;
         currentPageInput.max = totalPages;
-        renderPage(currentPage);
+
+        return doc.getPage(1);
+    }).then(firstPage => {
+        const unscaled = firstPage.getViewport({ scale: 1.0 });
+        if (window.innerWidth < 1024) {
+            currentScale = calculateFitWidthScale(unscaled.width);
+            zoomLevelText.textContent = Math.round(currentScale * 100) + '%';
+        }
+        renderPage(1);
     }).catch(err => {
         console.error('Error loading PDF:', err);
-        canvasLoader.innerHTML = `<span class="text-xs text-rose-600 font-semibold">Gagal memuat file PDF: ${err.message}</span>`;
+        canvasLoader.innerHTML = `<div class="p-4 text-center"><span class="text-xs text-rose-600 font-semibold block">Gagal memuat file PDF</span><span class="text-2xs text-slate-500 mt-1 block">${err.message}</span></div>`;
     });
 
-    // 3. Render Page
+    // Window resize handler for mobile responsiveness (debounced)
+    window.addEventListener('resize', debounce(() => {
+        if (window.innerWidth < 1024 && pdfDoc) {
+            fitToWidth();
+        }
+    }, 300));
+
+    // 3. Render Page with cancellation guard
     function renderPage(pageNum) {
         if (!pdfDoc) return;
+
+        // Cleanly cancel previous in-flight render task if any
+        if (currentRenderTask) {
+            currentRenderTask.cancel();
+            currentRenderTask = null;
+        }
+
         isRendering = true;
         canvasLoader.classList.remove('hidden');
 
@@ -634,7 +805,7 @@
             const pagePtWidth = unscaledViewport.width;
             const pagePtHeight = unscaledViewport.height;
 
-            // Set overlay viewBox to match PDF native point coordinates!
+            // Set overlay viewBox to match PDF native point coordinates
             overlaySvg.setAttribute('viewBox', `0 0 ${pagePtWidth} ${pagePtHeight}`);
             overlaySvg.style.width = Math.floor(viewport.width) + 'px';
             overlaySvg.style.height = Math.floor(viewport.height) + 'px';
@@ -649,18 +820,35 @@
                 viewport: viewport,
             };
 
-            const renderTask = page.render(renderContext);
+            currentRenderTask = page.render(renderContext);
 
-            renderTask.promise.then(() => {
+            currentRenderTask.promise.then(() => {
+                currentRenderTask = null;
                 isRendering = false;
                 canvasLoader.classList.add('hidden');
+
                 if (renderPending !== null) {
-                    renderPage(renderPending);
+                    const nextNum = renderPending;
                     renderPending = null;
+                    renderPage(nextNum);
+                } else {
+                    // Update Overlay visuals for this page
+                    updateOverlayVisuals(pageNum, pagePtWidth, pagePtHeight);
                 }
-                // Update Overlay visuals for this page
-                updateOverlayVisuals(pageNum, pagePtWidth, pagePtHeight);
+            }).catch(err => {
+                if (err && err.name === 'RenderingCancelledException') {
+                    // Normal: previous render was cancelled for a new scale or page
+                    return;
+                }
+                console.error('Render page error:', err);
+                currentRenderTask = null;
+                isRendering = false;
+                canvasLoader.classList.add('hidden');
             });
+        }).catch(err => {
+            console.error('Get page error:', err);
+            isRendering = false;
+            canvasLoader.classList.add('hidden');
         });
 
         // Update nav buttons
@@ -707,20 +895,22 @@
         queueRenderPage(currentPage);
     });
     zoomOutBtn.addEventListener('click', () => {
-        currentScale = Math.max(0.4, currentScale - 0.2);
+        currentScale = Math.max(0.25, currentScale - 0.2);
         zoomLevelText.textContent = Math.round(currentScale * 100) + '%';
         queueRenderPage(currentPage);
     });
-    fitWidthBtn.addEventListener('click', () => {
+    function fitToWidth() {
         if (!pdfDoc) return;
         pdfDoc.getPage(currentPage).then(page => {
             const unscaled = page.getViewport({ scale: 1.0 });
-            const containerWidth = viewerScrollContainer.clientWidth - 64;
-            currentScale = Math.max(0.4, Math.min(3.0, containerWidth / unscaled.width));
+            currentScale = calculateFitWidthScale(unscaled.width);
             zoomLevelText.textContent = Math.round(currentScale * 100) + '%';
             queueRenderPage(currentPage);
+        }).catch(err => {
+            console.error('fitToWidth error:', err);
         });
-    });
+    }
+    fitWidthBtn.addEventListener('click', fitToWidth);
 
     // 4. Update Overlay Visuals (Draft Lines & Notary Stamp)
     function updateOverlayVisuals(pageNo, pageWidth, pageHeight) {
@@ -731,6 +921,9 @@
         if (draftConfig.enabled && pageDraft && pageDraft.is_enabled && pageDraft.segments) {
             const color = draftConfig.color || '#DC2626';
             const thickness = draftConfig.thickness || 1.2;
+            const lineStyle = draftConfig.line_style || 'dashed';
+            const dashLen = parseFloat(draftConfig.dash_length) || 4.0;
+            const dashGapVal = parseFloat(draftConfig.dash_gap) || 3.0;
 
             pageDraft.segments.forEach(seg => {
                 const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
@@ -741,6 +934,9 @@
                 line.setAttribute('stroke', color);
                 line.setAttribute('stroke-width', thickness);
                 line.setAttribute('stroke-linecap', 'butt');
+                if (lineStyle === 'dashed') {
+                    line.setAttribute('stroke-dasharray', `${dashLen} ${dashGapVal}`);
+                }
                 draftLinesGroup.appendChild(line);
             });
         }
@@ -806,13 +1002,17 @@
         }
     }
 
-    // 5. Interactive Drag & Drop on PDF.js Canvas
+    // 5. Interactive Drag & Drop on PDF.js Canvas (Mouse + Touch Support)
     let isDraggingStamp = false;
     let dragStartPt = { x: 0, y: 0 };
     let stampStartPt = { x: 0, y: 0 };
 
-    stampGroup.addEventListener('mousedown', (e) => {
-        e.preventDefault();
+    function onStampDragStart(e) {
+        if (e.type === 'touchstart') {
+            if (!e.touches || e.touches.length !== 1) return;
+        } else {
+            e.preventDefault();
+        }
         isDraggingStamp = true;
 
         const placement = calculatedStamp.placements[currentPage];
@@ -824,7 +1024,13 @@
 
         window.addEventListener('mousemove', onStampDragMove);
         window.addEventListener('mouseup', onStampDragEnd);
-    });
+        window.addEventListener('touchmove', onStampDragMove, { passive: false });
+        window.addEventListener('touchend', onStampDragEnd);
+        window.addEventListener('touchcancel', onStampDragEnd);
+    }
+
+    stampGroup.addEventListener('mousedown', onStampDragStart);
+    stampGroup.addEventListener('touchstart', onStampDragStart, { passive: false });
 
     function getSvgPoint(e) {
         const rect = overlaySvg.getBoundingClientRect();
@@ -832,14 +1038,20 @@
         const scaleX = viewBox.width / rect.width;
         const scaleY = viewBox.height / rect.height;
 
+        const clientX = e.touches && e.touches.length > 0 ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches && e.touches.length > 0 ? e.touches[0].clientY : e.clientY;
+
         return {
-            x: (e.clientX - rect.left) * scaleX,
-            y: (e.clientY - rect.top) * scaleY,
+            x: (clientX - rect.left) * scaleX,
+            y: (clientY - rect.top) * scaleY,
         };
     }
 
     function onStampDragMove(e) {
         if (!isDraggingStamp) return;
+        if (e.type === 'touchmove') {
+            e.preventDefault();
+        }
 
         const pt = getSvgPoint(e);
         const deltaX = pt.x - dragStartPt.x;
@@ -890,6 +1102,9 @@
         isDraggingStamp = false;
         window.removeEventListener('mousemove', onStampDragMove);
         window.removeEventListener('mouseup', onStampDragEnd);
+        window.removeEventListener('touchmove', onStampDragMove);
+        window.removeEventListener('touchend', onStampDragEnd);
+        window.removeEventListener('touchcancel', onStampDragEnd);
 
         stampConfig.preset = 'custom';
         stampConfig.x_percent = parseFloat(stampXPercent.value);
@@ -916,6 +1131,17 @@
         draftConfig.ignore_headers_footers = draftIgnoreHeaderFooter.checked;
         draftConfig.target_pages = draftTargetPages.value;
         draftConfig.custom_pages = draftCustomPages.value;
+        draftConfig.line_style = draftLineStyle ? draftLineStyle.value : 'dashed';
+        draftConfig.dash_length = dashLength ? parseFloat(dashLength.value) : 4.0;
+        draftConfig.dash_gap = dashGap ? parseFloat(dashGap.value) : 3.0;
+
+        // Immediate visual feedback on SVG overlay
+        if (overlaySvg) {
+            const viewBox = overlaySvg.viewBox.baseVal;
+            if (viewBox && viewBox.width > 0) {
+                updateOverlayVisuals(currentPage, viewBox.width, viewBox.height);
+            }
+        }
 
         debouncedConfigUpdate();
     }

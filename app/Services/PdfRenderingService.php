@@ -51,6 +51,9 @@ class PdfRenderingService
         $draftRgb = $this->hexToRgb($draftConfig['color'] ?? '#DC2626');
         $draftThickness = (float) ($draftConfig['thickness'] ?? 1.2);
         $draftEnabled = (bool) ($draftConfig['enabled'] ?? true);
+        $lineStyle = $draftConfig['line_style'] ?? 'dashed';
+        $dashLength = (float) ($draftConfig['dash_length'] ?? 4.0);
+        $dashGap = (float) ($draftConfig['dash_gap'] ?? 3.0);
 
         $stampRgb = $this->hexToRgb($stampConfig['color'] ?? '#DC2626');
         $notaryName = $calculatedStamp['stamp_dimensions']['notary_name'];
@@ -92,7 +95,21 @@ class PdfRenderingService
                         $y2 = max(0.0, min($pageHeight, $y2));
 
                         if ($y2 > $y1) {
-                            $pdf->Line($x, $y1, $x, $y2);
+                            if ($lineStyle === 'dashed') {
+                                // Draw dashed vertical line manually using short segments
+                                $y = $y1;
+                                $drawing = true;
+                                while ($y < $y2) {
+                                    $segEnd = min($y + ($drawing ? $dashLength : $dashGap), $y2);
+                                    if ($drawing) {
+                                        $pdf->Line($x, $y, $x, $segEnd);
+                                    }
+                                    $y = $segEnd;
+                                    $drawing = ! $drawing;
+                                }
+                            } else {
+                                $pdf->Line($x, $y1, $x, $y2);
+                            }
                         }
                     }
                 }

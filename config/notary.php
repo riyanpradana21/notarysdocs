@@ -63,5 +63,8 @@ return [
         'footer_margin_percent' => 5.0, // Bottom 5% of page considered footer area
         'target_pages' => 'all_pages', // 'all_pages', 'first_page', 'custom'
         'custom_pages' => '',
+        'line_style' => 'dashed', // 'solid' or 'dashed' — dashed looks cleaner for draft lines
+        'dash_length' => 4.0, // pt dash length (only used when line_style = 'dashed')
+        'dash_gap' => 3.0,    // pt gap between dashes
     ],
 ];

@@ -15,19 +15,19 @@
     <!-- Navbar -->
     <header class="sticky top-0 z-40 bg-white border-b border-slate-200 shadow-xs">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between h-16">
+            <div class="flex justify-between h-14 sm:h-16">
                 <!-- Left: Brand -->
-                <div class="flex items-center space-x-8">
-                    <a href="{{ route('dashboard') }}" class="flex items-center space-x-3 text-slate-900 group">
-                        <div class="w-10 h-10 rounded-lg bg-rose-600 flex items-center justify-center text-white shadow-sm shadow-rose-200">
+                <div class="flex items-center space-x-3 sm:space-x-8">
+                    <a href="{{ route('dashboard') }}" class="flex items-center space-x-2.5 sm:space-x-3 text-slate-900 group">
+                        <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-lg bg-rose-600 flex items-center justify-center text-white shadow-sm shadow-rose-200 shrink-0">
                             <!-- SVG Notary / Document Seal Icon -->
-                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+                            <svg class="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
                             </svg>
                         </div>
                         <div>
-                            <span class="text-lg font-bold tracking-tight text-slate-900">Notary<span class="text-rose-600">Draft</span></span>
-                            <span class="block text-2xs uppercase tracking-wider text-slate-400 font-medium">Dynamic Document System</span>
+                            <span class="text-base sm:text-lg font-bold tracking-tight text-slate-900 whitespace-nowrap">Notary<span class="text-rose-600">Draft</span></span>
+                            <span class="hidden sm:block text-2xs uppercase tracking-wider text-slate-400 font-medium">Dynamic Document System</span>
                         </div>
                     </a>
 
@@ -47,10 +47,10 @@
                     </nav>
                 </div>
 
-                <!-- Right: User / Auth -->
-                <div class="flex items-center space-x-3">
+                <!-- Right: User / Auth & Mobile Nav Toggle -->
+                <div class="flex items-center space-x-2 sm:space-x-3">
                     @auth
-                        <div class="flex items-center space-x-3 border-l border-slate-200 pl-4">
+                        <div class="flex items-center space-x-3 border-l border-slate-200 pl-3 sm:pl-4">
                             @if (Auth::user()->avatar)
                                 <img src="{{ Auth::user()->avatar }}" alt="{{ Auth::user()->name }}" class="w-8 h-8 rounded-full border border-slate-200 object-cover shrink-0">
                             @endif
@@ -68,15 +68,49 @@
                             </form>
                         </div>
                     @else
-                        <a href="{{ route('login') }}" class="text-sm font-medium text-slate-600 hover:text-slate-900">Masuk</a>
-                        <a href="{{ route('register') }}" class="ml-2 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-rose-600 hover:bg-rose-700 shadow-xs">Daftar</a>
+                        <div class="hidden sm:flex items-center space-x-2">
+                            <a href="{{ route('login') }}" class="text-sm font-medium text-slate-600 hover:text-slate-900 px-3 py-2">Masuk</a>
+                            <a href="{{ route('register') }}" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-rose-600 hover:bg-rose-700 shadow-xs">Daftar</a>
+                        </div>
                     @endauth
+
+                    <!-- Mobile Menu Hamburger Button -->
+                    <button type="button" id="mobileNavMenuBtn" class="md:hidden p-2 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 focus:outline-none transition-colors" aria-label="Menu Navigasi">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+                        </svg>
+                    </button>
                 </div>
             </div>
         </div>
+
+        <!-- Mobile Navigation Menu Dropdown -->
+        <div id="mobileNavMenu" class="hidden md:hidden border-t border-slate-200 bg-white px-4 pt-2 pb-4 space-y-1 shadow-lg">
+            <a href="{{ route('dashboard') }}" class="block px-3 py-2 rounded-lg text-sm font-medium {{ request()->routeIs('dashboard') ? 'bg-rose-50 text-rose-700 font-semibold' : 'text-slate-700 hover:bg-slate-50' }}">
+                Dashboard
+            </a>
+            <a href="{{ route('documents.upload') }}" class="block px-3 py-2 rounded-lg text-sm font-medium {{ request()->routeIs('documents.upload') ? 'bg-rose-50 text-rose-700 font-semibold' : 'text-slate-700 hover:bg-slate-50' }}">
+                Unggah Dokumen
+            </a>
+            @auth
+            <a href="{{ route('documents.history') }}" class="block px-3 py-2 rounded-lg text-sm font-medium {{ request()->routeIs('documents.history') ? 'bg-rose-50 text-rose-700 font-semibold' : 'text-slate-700 hover:bg-slate-50' }}">
+                Riwayat Dokumen
+            </a>
+            <div class="pt-2 border-t border-slate-100 flex items-center justify-between px-3 text-xs text-slate-500">
+                <span>{{ Auth::user()->name }}</span>
+                <span class="text-2xs text-slate-400">({{ Auth::user()->email }})</span>
+            </div>
+            @else
+            <div class="pt-2 border-t border-slate-100 flex items-center space-x-2 px-1">
+                <a href="{{ route('login') }}" class="flex-1 text-center py-2 text-xs font-semibold text-slate-700 bg-slate-100 rounded-lg">Masuk</a>
+                <a href="{{ route('register') }}" class="flex-1 text-center py-2 text-xs font-semibold text-white bg-rose-600 rounded-lg">Daftar</a>
+            </div>
+            @endauth
+        </div>
     </header>
 
-    <!-- Flash Messages -->
+    <!-- Flash Messages (only if present) -->
+    @if (session('success') || session('error') || session('info'))
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full pt-4">
         @if (session('success'))
             <div class="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 flex items-start space-x-3 text-emerald-800 shadow-xs">
@@ -105,20 +139,33 @@
             </div>
         @endif
     </div>
+    @endif
 
     <!-- Main Content -->
-    <main class="flex-1">
+    <main class="flex-1 flex flex-col min-h-0">
         {{ $slot ?? '' }}
         @yield('content')
     </main>
 
+    @if (!request()->routeIs('documents.editor'))
     <!-- Footer -->
     <footer class="border-t border-slate-200 bg-white py-6 mt-12">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-xs text-slate-500">
             Sistem Draf Dokumen Notaris Dinamis — Standar Akurasi Dokumen Hukum Indonesia.
         </div>
     </footer>
+    @endif
 
+    <script>
+        // Toggle mobile navbar menu
+        const mobileNavMenuBtn = document.getElementById('mobileNavMenuBtn');
+        const mobileNavMenu = document.getElementById('mobileNavMenu');
+        if (mobileNavMenuBtn && mobileNavMenu) {
+            mobileNavMenuBtn.addEventListener('click', () => {
+                mobileNavMenu.classList.toggle('hidden');
+            });
+        }
+    </script>
     @stack('scripts')
 </body>
 </html>

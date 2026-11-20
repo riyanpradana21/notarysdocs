@@ -182,7 +182,8 @@
                 </div>
             </div>
         @else
-            <div class="overflow-x-auto">
+            <!-- Desktop Table View (>= md) -->
+            <div class="hidden md:block overflow-x-auto">
                 <table class="min-w-full divide-y divide-slate-200 text-left text-sm">
                     <thead class="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
                         <tr>
@@ -257,6 +258,63 @@
                         @endforeach
                     </tbody>
                 </table>
+            </div>
+
+            <!-- Mobile Card List View (< md) -->
+            <div class="md:hidden divide-y divide-slate-200">
+                @foreach ($recentDocuments as $doc)
+                    <div class="p-4 space-y-3">
+                        <div class="flex items-start justify-between gap-2">
+                            <div class="min-w-0">
+                                <h3 class="text-sm font-semibold text-slate-900 truncate">{{ $doc->title }}</h3>
+                                <p class="text-xs text-slate-400 truncate">{{ $doc->original_filename }}</p>
+                            </div>
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-2xs font-bold uppercase tracking-wider shrink-0 {{ $doc->source_type === 'pdf' ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-blue-50 text-blue-700 border border-blue-200' }}">
+                                {{ $doc->source_type }}
+                            </span>
+                        </div>
+
+                        <div class="flex items-center justify-between text-xs text-slate-500 pt-1">
+                            <span>{{ $doc->page_count > 0 ? $doc->page_count . ' Halaman' : '-' }} &bull; {{ $doc->formatted_file_size }}</span>
+                            @if ($doc->status === 'ready')
+                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-2xs font-medium bg-emerald-100 text-emerald-800">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1"></span>
+                                    Siap
+                                </span>
+                            @elseif ($doc->status === 'failed')
+                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-2xs font-medium bg-rose-100 text-rose-800">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-rose-500 mr-1"></span>
+                                    Gagal
+                                </span>
+                            @else
+                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-2xs font-medium bg-amber-100 text-amber-800">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-amber-500 mr-1 animate-pulse"></span>
+                                    Memproses
+                                </span>
+                            @endif
+                        </div>
+
+                        <div class="pt-2 flex items-center justify-end space-x-2 border-t border-slate-100">
+                            @if ($doc->isReady())
+                                <a href="{{ route('documents.editor', $doc) }}" class="flex-1 text-center py-2 px-3 rounded-lg text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-colors">
+                                    Buka Editor
+                                </a>
+                                @if ($doc->hasFinalPdf())
+                                    <a href="{{ route('documents.download', $doc) }}" class="flex-1 text-center py-2 px-3 rounded-lg text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors">
+                                        Unduh Final
+                                    </a>
+                                @endif
+                            @elseif ($doc->isFailed())
+                                <form action="{{ route('documents.retry', $doc) }}" method="POST" class="w-full">
+                                    @csrf
+                                    <button type="submit" class="w-full py-2 px-3 rounded-lg text-xs font-semibold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200">
+                                        Coba Lagi
+                                    </button>
+                                </form>
+                            @endif
+                        </div>
+                    </div>
+                @endforeach
             </div>
         @endif
     </div>
