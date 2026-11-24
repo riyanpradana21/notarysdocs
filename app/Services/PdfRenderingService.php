@@ -51,6 +51,7 @@ class PdfRenderingService
         $draftRgb = $this->hexToRgb($draftConfig['color'] ?? '#DC2626');
         $draftThickness = (float) ($draftConfig['thickness'] ?? 1.2);
         $draftEnabled = (bool) ($draftConfig['enabled'] ?? true);
+        $drawnDraftSegmentCount = 0;
         $lineStyle = $draftConfig['line_style'] ?? 'dashed';
         $dashLength = (float) ($draftConfig['dash_length'] ?? 4.0);
         $dashGap = (float) ($draftConfig['dash_gap'] ?? 3.0);
@@ -97,8 +98,14 @@ class PdfRenderingService
                         $y1 = max(0.0, min($pageHeight, (float) $seg['y_start']));
                         $y2 = max(0.0, min($pageHeight, (float) $seg['y_end']));
 
-                        if ($y2 > $y1) {
+                        if (
+                            is_finite($x) &&
+                            $x >= 0.0 &&
+                            $x <= $pageWidth &&
+                            $y2 > $y1
+                        ) {
                             $pdf->Line($x, $y1, $x, $y2);
+                            $drawnDraftSegmentCount++;
                         }
                     }
 
@@ -134,6 +141,15 @@ class PdfRenderingService
                         $pdf->Cell($stampWidth, $fontSizeCity, $cityTitle, 0, 0, 'C');
                     }
                 }
+            }
+
+            // Fail closed when draft lines are enabled but none were drawn.
+            if ($draftEnabled && $drawnDraftSegmentCount === 0) {
+                throw new RuntimeException(
+                    'Garis draf diaktifkan, tetapi tidak ada garis valid '.
+                    'yang dapat digambar. Periksa koordinat teks PDF, '.
+                    'pilihan halaman, dan konfigurasi garis sebelum Generate.'
+                );
             }
 
             // Save final PDF

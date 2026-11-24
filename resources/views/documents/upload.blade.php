@@ -162,6 +162,10 @@ document.addEventListener('DOMContentLoaded', function () {
     const errorBox = document.getElementById('errorBox');
     const errorMessage = document.getElementById('errorMessage');
     const retryBtn = document.getElementById('retryBtn');
+    const processSubText = document.getElementById('processSubText');
+
+    let selectedFile = null;
+    let uploadInProgress = false;
 
     // Trigger file browser on drop zone click
     dropZone.addEventListener('click', function (e) {
@@ -185,15 +189,15 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     });
 
-    // File drop
+    // File drop: use the same state as the file picker.
     dropZone.addEventListener('drop', (e) => {
-        const dt = e.dataTransfer;
-        if (dt.files && dt.files.length > 0) {
-            handleFileSelect(dt.files[0]);
+        const files = e.dataTransfer?.files;
+
+        if (files && files.length > 0) {
+            handleFileSelect(files[0]);
         }
     });
 
-    // File select
     input.addEventListener('change', () => {
         if (input.files && input.files.length > 0) {
             handleFileSelect(input.files[0]);
@@ -201,43 +205,73 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     function formatBytes(bytes) {
-        if (bytes >= 1048576) return (bytes / 1048576).toFixed(2) + ' MB';
-        if (bytes >= 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        if (bytes >= 1048576) {
+            return (bytes / 1048576).toFixed(2) + ' MB';
+        }
+
+        if (bytes >= 1024) {
+            return (bytes / 1024).toFixed(1) + ' KB';
+        }
+
         return bytes + ' B';
     }
 
+    function clearSelection() {
+        selectedFile = null;
+        input.value = '';
+
+        dropPrompt.classList.remove('hidden');
+        selectedFileInfo.classList.add('hidden');
+        submitBtn.disabled = true;
+    }
+
     function handleFileSelect(file) {
-        const allowedExtensions = ['docx', 'pdf'];
+        if (!file || !file.name) {
+            clearSelection();
+            showError('File tidak valid.');
+            return;
+        }
+
         const ext = file.name.split('.').pop().toLowerCase();
 
-        if (!allowedExtensions.includes(ext)) {
-            showError('Hanya file bertipe .docx dan .pdf yang diperbolehkan.');
+        if (!['pdf', 'docx'].includes(ext)) {
+            clearSelection();
+            showError('Hanya PDF atau DOCX yang diperbolehkan.');
             return;
         }
 
-        const maxBytes = 25 * 1024 * 1024;
-        if (file.size > maxBytes) {
-            showError('Ukuran file melebihi batas 25 MB.');
+        if (file.size === 0) {
+            clearSelection();
+            showError('File kosong tidak dapat diunggah.');
             return;
         }
 
-        hideError();
+        if (file.size > 25 * 1024 * 1024) {
+            clearSelection();
+            showError('Ukuran file melebihi 25 MB.');
+            return;
+        }
+
+        selectedFile = file;
+
         fileName.textContent = file.name;
         fileSize.textContent = formatBytes(file.size);
 
         dropPrompt.classList.add('hidden');
         selectedFileInfo.classList.remove('hidden');
-        submitBtn.disabled = false;
+
+        submitBtn.disabled = uploadInProgress;
+        hideError();
     }
 
     removeFileBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        input.value = '';
-        dropPrompt.classList.remove('hidden');
-        selectedFileInfo.classList.add('hidden');
-        submitBtn.disabled = true;
-    });
 
+        if (!uploadInProgress) {
+            clearSelection();
+            hideError();
+        }
+    });
     function showError(msg) {
         errorMessage.textContent = msg;
         errorBox.classList.remove('hidden');
@@ -250,83 +284,169 @@ document.addEventListener('DOMContentLoaded', function () {
     retryBtn.addEventListener('click', () => {
         hideError();
         processingCard.classList.add('hidden');
-        submitBtn.disabled = false;
+        submitBtn.disabled = uploadInProgress || !selectedFile;
     });
 
-    // AJAX upload with progress tracking
+    // AJAX upload with reliable file selection and error handling.
     uploadForm.addEventListener('submit', function (e) {
         e.preventDefault();
 
-        if (!input.files || input.files.length === 0) {
+        if (uploadInProgress) {
+            return;
+        }
+
+        if (!selectedFile) {
             showError('Silakan pilih dokumen terlebih dahulu.');
             return;
         }
 
-        hideError();
-        submitBtn.disabled = true;
-        processingCard.classList.remove('hidden');
-        progressBar.style.width = '15%';
-        processPercentText.textContent = '15%';
-
         const formData = new FormData(uploadForm);
-        const xhr = new XMLHttpRequest();
-        xhr.open('POST', uploadForm.action, true);
-        xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
-        xhr.setRequestHeader('X-CSRF-TOKEN', document.querySelector('meta[name="csrf-token"]').getAttribute('content'));
 
-        xhr.upload.onprogress = function (e) {
-            if (e.lengthComputable) {
-                // Upload is 0 - 60% of the total experience
-                const percent = Math.round((e.loaded / e.total) * 60);
-                progressBar.style.width = percent + '%';
-                processPercentText.textContent = percent + '%';
-                if (percent >= 60) {
-                    processStatusText.innerHTML = `
-                        <svg class="animate-spin -ml-0.5 mr-2 h-4 w-4 text-rose-600" fill="none" viewBox="0 0 24 24">
-                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
-                        </svg>
-                        Menganalisis layout & koordinat teks via Poppler...
-                    `;
-                    progressBar.style.width = '85%';
-                    processPercentText.textContent = '85%';
-                }
+        // Important: supports dropped files without modifying input.files.
+        formData.set(
+            'document',
+            selectedFile,
+            selectedFile.name
+        );
+
+        const xhr = new XMLHttpRequest();
+
+        uploadInProgress = true;
+        submitBtn.disabled = true;
+
+        hideError();
+        processingCard.classList.remove('hidden');
+
+        progressBar.style.width = '0%';
+        processPercentText.textContent = '0%';
+
+        processSubText.textContent =
+            'Mengunggah dokumen ke server...';
+
+        function fail(message) {
+            uploadInProgress = false;
+            submitBtn.disabled = !selectedFile;
+
+            processingCard.classList.add('hidden');
+            showError(message);
+        }
+
+        xhr.upload.onprogress = function (event) {
+            if (!event.lengthComputable) {
+                return;
             }
+
+            const percent = Math.min(
+                60,
+                Math.round(
+                    (event.loaded / event.total) * 60
+                )
+            );
+
+            progressBar.style.width = percent + '%';
+            processPercentText.textContent = percent + '%';
+        };
+
+        xhr.upload.onload = function () {
+            progressBar.style.width = '60%';
+            processPercentText.textContent = '60%';
+
+            processSubText.textContent =
+                'Upload selesai. Menunggu pemrosesan dokumen...';
         };
 
         xhr.onload = function () {
-            if (xhr.status >= 200 && xhr.status < 300) {
+            let data = null;
+
+            try {
+                data = JSON.parse(xhr.responseText);
+            } catch (error) {
+                // HTML errors must never trigger an unexpected reload.
+            }
+
+            if (
+                xhr.status >= 200 &&
+                xhr.status < 300 &&
+                data?.success === true &&
+                typeof data.redirect_url === 'string'
+            ) {
                 progressBar.style.width = '100%';
                 processPercentText.textContent = '100%';
-                try {
-                    const res = JSON.parse(xhr.responseText);
-                    if (res.success && res.redirect_url) {
-                        window.location.href = res.redirect_url;
-                    } else {
-                        showError(res.message || 'Respons tidak valid dari server.');
-                    }
-                } catch (err) {
-                    window.location.reload();
-                }
-            } else {
-                let err = 'Terjadi kesalahan saat memproses dokumen.';
-                try {
-                    const res = JSON.parse(xhr.responseText);
-                    err = res.message || err;
-                } catch (e) {}
-                showError(err);
-                processingCard.classList.add('hidden');
-                submitBtn.disabled = false;
+
+                window.location.assign(data.redirect_url);
+                return;
             }
+
+            let message = data?.message ||
+                `Server gagal memproses dokumen (HTTP ${xhr.status}).`;
+
+            if (xhr.status === 419) {
+                message =
+                    'Sesi atau token keamanan kedaluwarsa. ' +
+                    'Muat ulang halaman lalu coba lagi.';
+            } else if (xhr.status === 413) {
+                message =
+                    'File melebihi batas upload server.';
+            } else if (xhr.status === 422 && data?.errors) {
+                const firstError = Object.values(data.errors)[0];
+
+                if (Array.isArray(firstError) && firstError[0]) {
+                    message = firstError[0];
+                }
+            } else if (!data && xhr.status >= 200 && xhr.status < 300) {
+                message =
+                    'Server mengembalikan respons yang bukan JSON. ' +
+                    'Periksa konfigurasi Laravel dan log hosting.';
+            }
+
+            fail(message);
         };
 
         xhr.onerror = function () {
-            showError('Koneksi jaringan terputus atau server tidak merespons.');
-            processingCard.classList.add('hidden');
-            submitBtn.disabled = false;
+            fail(
+                'Koneksi terputus atau server tidak merespons.'
+            );
         };
 
-        xhr.send(formData);
+        xhr.ontimeout = function () {
+            fail(
+                'Proses upload melebihi batas waktu. ' +
+                'Periksa status server dan coba lagi.'
+            );
+        };
+
+        xhr.onabort = function () {
+            fail('Upload dibatalkan.');
+        };
+
+        try {
+            xhr.open('POST', uploadForm.action, true);
+
+            xhr.setRequestHeader(
+                'X-Requested-With',
+                'XMLHttpRequest'
+            );
+
+            xhr.setRequestHeader(
+                'Accept',
+                'application/json'
+            );
+
+            xhr.setRequestHeader(
+                'X-CSRF-TOKEN',
+                document
+                    .querySelector('meta[name="csrf-token"]')
+                    .getAttribute('content')
+            );
+
+            xhr.timeout = 180000;
+            xhr.send(formData);
+        } catch (error) {
+            fail(
+                'Gagal memulai upload: ' +
+                (error instanceof Error ? error.message : String(error))
+            );
+        }
     });
 });
 </script>

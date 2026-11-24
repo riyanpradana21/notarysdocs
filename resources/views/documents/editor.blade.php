@@ -445,15 +445,12 @@
 @endsection
 
 @push('scripts')
-<!-- Load PDF.js from Cloudflare CDN (Universally supported on cPanel & local) -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script>
-    if (window.pdfjsLib) {
-        window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-    }
-</script>
-<script>
-    const pdfjsLib = window.pdfjsLib;
+<!-- Self-hosted PDF.js: main module and worker use matching versions. -->
+<script type="module">
+    import * as pdfjsLib from "{{ asset('vendor/pdfjs/pdf.min.mjs') }}";
+
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+        "{{ asset('vendor/pdfjs/pdf.worker.min.mjs') }}";
 
     // Application State passed from Backend
     const PDF_STREAM_URL = '{{ route("documents.stream", $document) }}';
@@ -476,6 +473,11 @@
     let isRendering = false;
     let renderPending = null;
     let currentRenderTask = null;
+
+    // PDF.js layout synchronization state.
+    let layoutSyncNeeded = false;
+    let layoutSyncPromise = null;
+    let layoutSyncError = null;
 
     // DOM References
     const pdfCanvas = document.getElementById('pdfCanvas');
@@ -714,9 +716,10 @@
             currentPageInput.max = totalPages;
 
             // If layout data is missing from backend (e.g. cPanel without proc_open), extract via PDF.js!
-            const needsLayout = !rawLayoutData || rawLayoutData.fallback_mode || !rawLayoutData.pages || !rawLayoutData.pages[1] || !rawLayoutData.pages[1].blocks || rawLayoutData.pages[1].blocks.length === 0;
-            if (needsLayout) {
-                extractAndSyncLayout(doc);
+            layoutSyncNeeded = !rawLayoutData || rawLayoutData.fallback_mode || !rawLayoutData.pages || !rawLayoutData.pages[1] || !rawLayoutData.pages[1].blocks || rawLayoutData.pages[1].blocks.length === 0;
+
+            if (layoutSyncNeeded) {
+                layoutSyncPromise = extractAndSyncLayout(doc);
             }
 
             return doc.getPage(1);
@@ -823,6 +826,16 @@
                 };
             }
 
+            const hasTextLayer = Object.values(pages).some(
+                page => page.line_count > 0
+            );
+
+            if (!hasTextLayer) {
+                throw new Error(
+                    'Dokumen tidak memiliki lapisan teks. Garis otomatis tidak dapat dibuat dari PDF scan.'
+                );
+            }
+
             const clientLayout = {
                 page_count: doc.numPages,
                 is_scanned: false,
@@ -831,7 +844,7 @@
             };
 
             const response = await fetch(CONFIG_UPDATE_URL, {
-                method: 'POST',
+                method: 'PATCH',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-CSRF-TOKEN': '{{ csrf_token() }}',
@@ -844,8 +857,21 @@
                 }),
             });
 
-            if (response.ok) {
-                const data = await response.json();
+            if (!response.ok) {
+                throw new Error(
+                    `Penyimpanan layout gagal. HTTP ${response.status}`
+                );
+            }
+
+            const data = await response.json();
+
+            if (data.success !== true || !data.draft_lines) {
+                throw new Error(
+                    data.message || 'Server tidak berhasil menyimpan koordinat garis.'
+                );
+            }
+
+            {
                 if (data.draft_lines) {
                     calculatedDraftLines = data.draft_lines;
                 }
@@ -859,8 +885,19 @@
                 const unscaledCur = curPageObj.getViewport({ scale: 1.0 });
                 updateOverlayVisuals(currentPage, unscaledCur.width, unscaledCur.height);
             }
+
+            return true;
         } catch (err) {
-            console.warn('Auto client-side text layout extraction notice:', err);
+            layoutSyncError = err instanceof Error
+                ? err.message
+                : String(err);
+
+            console.error(
+                'PDF layout synchronization failed:',
+                err
+            );
+
+            return false;
         }
     }
 
@@ -1267,91 +1304,266 @@
         debouncedConfigUpdate();
     }
 
-    const debouncedConfigUpdate = debounce(sendConfigUpdate, 350);
+    // 6A. Serialize configuration writes to prevent stale autosave races.
+    let configSaveQueue = Promise.resolve();
+    let configSaveTimer = null;
+    let configSaveSequence = 0;
+    let generateInProgress = false;
 
-    function sendConfigUpdate() {
+    function debouncedConfigUpdate() {
+        if (generateInProgress) return;
+
+        if (configSaveTimer !== null) {
+            clearTimeout(configSaveTimer);
+        }
+
+        configSaveTimer = setTimeout(() => {
+            configSaveTimer = null;
+            void sendConfigUpdate(false);
+        }, 350);
+    }
+
+    debouncedConfigUpdate.cancel = function () {
+        if (configSaveTimer !== null) {
+            clearTimeout(configSaveTimer);
+            configSaveTimer = null;
+        }
+    };
+
+    function sendConfigUpdate(force = false) {
+        if (generateInProgress && !force) {
+            return configSaveQueue;
+        }
+
+        // Snapshot settings at the time the save was requested.
+        const payload = {
+            draft_lines: JSON.parse(JSON.stringify(draftConfig)),
+            stamp: JSON.parse(JSON.stringify(stampConfig)),
+        };
+
+        const sequence = ++configSaveSequence;
+
         saveStatus.classList.remove('hidden');
         saveStatus.textContent = 'Menyimpan...';
 
-        const payload = {
-            draft_lines: draftConfig,
-            stamp: stampConfig,
-        };
+        // Every request waits until the previous request has settled.
+        configSaveQueue = configSaveQueue.then(async () => {
+            try {
+                const response = await fetch(CONFIG_UPDATE_URL, {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document
+                            .querySelector('meta[name="csrf-token"]')
+                            .getAttribute('content'),
+                        'Accept': 'application/json',
+                    },
+                    body: JSON.stringify(payload),
+                });
 
-        fetch(CONFIG_UPDATE_URL, {
-            method: 'PATCH',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
-                'Accept': 'application/json',
-            },
-            body: JSON.stringify(payload),
-        })
-        .then(res => res.json())
-        .then(data => {
-            if (data.success) {
-                saveStatus.textContent = 'Tersimpan';
-                setTimeout(() => saveStatus.classList.add('hidden'), 2000);
+                let data = null;
 
-                calculatedDraftLines = data.draft_lines;
-                calculatedStamp = data.stamp;
+                try {
+                    data = await response.json();
+                } catch (error) {
+                    throw new Error(
+                        `Server mengembalikan respons tidak valid (HTTP ${response.status}).`
+                    );
+                }
 
-                const viewBox = overlaySvg.viewBox.baseVal;
-                updateOverlayVisuals(currentPage, viewBox.width, viewBox.height);
+                if (!response.ok || data?.success !== true) {
+                    throw new Error(
+                        data?.message ||
+                        `Gagal menyimpan konfigurasi (HTTP ${response.status}).`
+                    );
+                }
+
+                if (!data.draft_lines || !data.stamp) {
+                    throw new Error(
+                        'Respons konfigurasi tidak lengkap.'
+                    );
+                }
+
+                // Only the newest result can update the preview.
+                if (sequence === configSaveSequence) {
+                    calculatedDraftLines = data.draft_lines;
+                    calculatedStamp = data.stamp;
+
+                    saveStatus.textContent = 'Tersimpan';
+
+                    const viewBox = overlaySvg.viewBox.baseVal;
+
+                    if (viewBox && viewBox.width > 0) {
+                        updateOverlayVisuals(
+                            currentPage,
+                            viewBox.width,
+                            viewBox.height
+                        );
+                    }
+
+                    setTimeout(() => {
+                        if (
+                            sequence === configSaveSequence &&
+                            !generateInProgress
+                        ) {
+                            saveStatus.classList.add('hidden');
+                        }
+                    }, 2000);
+                }
+
+                return true;
+            } catch (error) {
+                console.error(
+                    'Configuration save failed:',
+                    error
+                );
+
+                saveStatus.classList.remove('hidden');
+                saveStatus.textContent = 'Gagal menyimpan';
+
+                return false;
             }
-        })
-        .catch(err => {
-            console.error('Save config failed:', err);
-            saveStatus.textContent = 'Gagal menyimpan';
         });
+
+        return configSaveQueue;
     }
 
-    saveConfigBtn.addEventListener('click', sendConfigUpdate);
+    saveConfigBtn.addEventListener('click', () => {
+        debouncedConfigUpdate.cancel();
+        void sendConfigUpdate(false);
+    });
 
     // 7. Generate PDF Final
-    generatePdfBtn.addEventListener('click', () => {
+    // Wait for text-layout synchronization before generating draft lines.
+    generatePdfBtn.addEventListener('click', async () => {
+        if (generatePdfBtn.disabled) {
+            return;
+        }
+
+        if (!pdfDoc) {
+            alert('PDF belum selesai dimuat. Silakan coba lagi.');
+            return;
+        }
+
         generatePdfBtn.disabled = true;
+        generateInProgress = true;
+
+        // Prevent pending autosave from firing after Generate.
+        debouncedConfigUpdate.cancel();
+
+        const configPanel = document.getElementById('configPanel');
+
+        if (configPanel) {
+            configPanel.inert = true;
+        }
+
+        saveConfigBtn.disabled = true;
+
         generateSpinner.classList.remove('hidden');
         generateIcon.classList.add('hidden');
-        generateBtnText.textContent = 'Menghasilkan PDF...';
 
-        fetch(GENERATE_URL, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
-                'Accept': 'application/json',
-            },
-            body: JSON.stringify({
-                draft_lines: draftConfig,
-                stamp: stampConfig,
-            }),
-        })
-        .then(res => res.json())
-        .then(data => {
-            generatePdfBtn.disabled = false;
-            generateSpinner.classList.add('hidden');
-            generateIcon.classList.remove('hidden');
-            generateBtnText.textContent = 'Generate PDF Final';
+        try {
+            // Wait for already-running configuration saves.
+            await configSaveQueue;
+            if (layoutSyncNeeded && draftConfig.enabled !== false) {
+                generateBtnText.textContent = 'Menganalisis teks...';
 
-            if (data.success) {
-                downloadBtn.classList.remove('hidden');
-                downloadBtn.classList.add('inline-flex');
-                downloadBtn.href = data.download_url;
+                const layoutReady = layoutSyncPromise
+                    ? await layoutSyncPromise
+                    : false;
 
-                // Show success notification
-                alert('PDF Final berhasil dibuat dengan garis draf dan stempel! Anda dapat mengunduhnya sekarang.');
-            } else {
-                alert('Gagal menghasilkan PDF: ' + (data.message || 'Unknown error'));
+                if (!layoutReady) {
+                    throw new Error(
+                        layoutSyncError ||
+                        'Koordinat teks belum berhasil disimpan. PDF tidak akan digenerate tanpa garis.'
+                    );
+                }
             }
-        })
-        .catch(err => {
+
+            // Ensure the latest settings are recalculated and persisted
+            // after PDF.js layout synchronization has finished.
+            const latestConfigSaved = await sendConfigUpdate(true);
+
+            if (!latestConfigSaved) {
+                throw new Error(
+                    'Konfigurasi terbaru gagal disimpan. Generate dibatalkan.'
+                );
+            }
+
+            if (draftConfig.enabled !== false) {
+                const hasLines = Object.values(
+                    calculatedDraftLines || {}
+                ).some(page =>
+                    page &&
+                    page.is_enabled !== false &&
+                    Array.isArray(page.segments) &&
+                    page.segments.length > 0
+                );
+
+                if (!hasLines) {
+                    throw new Error(
+                        'Tidak ditemukan garis otomatis pada dokumen. Periksa lapisan teks dan pengaturan halaman.'
+                    );
+                }
+            }
+
+            generateBtnText.textContent = 'Menghasilkan PDF...';
+
+            const response = await fetch(GENERATE_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document
+                        .querySelector('meta[name="csrf-token"]')
+                        .getAttribute('content'),
+                    'Accept': 'application/json',
+                },
+                body: JSON.stringify({
+                    draft_lines: draftConfig,
+                    stamp: stampConfig,
+                }),
+            });
+
+            const data = await response.json();
+
+            if (!response.ok || data.success !== true) {
+                throw new Error(
+                    data.message ||
+                    `Generate PDF gagal. HTTP ${response.status}`
+                );
+            }
+
+            if (!data.download_url) {
+                throw new Error(
+                    'Server tidak mengembalikan URL download PDF.'
+                );
+            }
+
+            downloadBtn.classList.remove('hidden');
+            downloadBtn.classList.add('inline-flex');
+            downloadBtn.href = data.download_url;
+
+            alert('PDF Final berhasil dibuat! Silakan unduh dokumen.');
+        } catch (err) {
+            console.error('PDF generation failed:', err);
+
+            alert(
+                'Gagal menghasilkan PDF: ' +
+                (err instanceof Error ? err.message : String(err))
+            );
+        } finally {
+            generateInProgress = false;
+
+            if (configPanel) {
+                configPanel.inert = false;
+            }
+
+            saveConfigBtn.disabled = false;
             generatePdfBtn.disabled = false;
             generateSpinner.classList.add('hidden');
             generateIcon.classList.remove('hidden');
             generateBtnText.textContent = 'Generate PDF Final';
-            alert('Terjadi kesalahan saat memproses PDF final: ' + err.message);
-        });
+        }
     });
 
     // Utility: Debounce helper
