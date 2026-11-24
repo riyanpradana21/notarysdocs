@@ -8,6 +8,7 @@ use App\Services\DraftLineService;
 use App\Services\PdfRenderingService;
 use App\Services\StampPlacementService;
 use App\Services\TextLayoutDetectionService;
+use App\Services\ClientPdfLayoutValidator;
 use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -302,7 +303,9 @@ class DocumentController extends Controller
         Gate::authorize('update', $document);
 
         $validated = $request->validate([
-            'layout_data' => ['nullable', 'array'],
+            'layout_data' => ['sometimes', 'required', 'array'],
+            'layout_data.page_count' => ['required_with:layout_data', 'integer', 'min:1', 'max:100'],
+            'layout_data.pages' => ['required_with:layout_data', 'array'],
             'draft_lines' => ['nullable', 'array'],
             'draft_lines.enabled' => ['nullable', 'boolean'],
             'draft_lines.color' => ['nullable', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
@@ -332,6 +335,14 @@ class DocumentController extends Controller
             'stamp.y_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
         ]);
 
+        // Browser coordinates must match the actual source PDF.
+        $clientLayout = null;
+
+        if (isset($validated['layout_data'])) {
+            $clientLayout = app(ClientPdfLayoutValidator::class)
+                ->validate($validated['layout_data'], $document);
+        }
+
         $currentDraft = $document->draft_line_config ?? config('notary.default_draft_lines');
         $currentStamp = $document->stamp_config ?? config('notary.default_stamp');
 
@@ -343,10 +354,10 @@ class DocumentController extends Controller
             'stamp_config' => $mergedStamp,
         ];
 
-        if (! empty($validated['layout_data']) && ! empty($validated['layout_data']['pages'])) {
-            $updatePayload['layout_data'] = $validated['layout_data'];
+        if ($clientLayout !== null) {
+            $updatePayload['layout_data'] = $clientLayout;
             $updatePayload['error_message'] = null;
-            $document->layout_data = $validated['layout_data'];
+            $document->layout_data = $clientLayout;
             $document->error_message = null;
         }
 
@@ -378,19 +389,61 @@ class DocumentController extends Controller
             ], 400);
         }
 
-        // If client passes fresh config with generate request, update first
-        if ($request->has('draft_lines') || $request->has('stamp')) {
-            $currentDraft = $document->draft_line_config ?? config('notary.default_draft_lines');
-            $currentStamp = $document->stamp_config ?? config('notary.default_stamp');
+        // Validate all client-provided settings before rendering.
+        // Invalid data returns HTTP 422 instead of silently changing the PDF.
+        $validated = $request->validate([
+            'draft_lines' => ['sometimes', 'array'],
+            'draft_lines.enabled' => ['sometimes', 'boolean'],
+            'draft_lines.color' => ['sometimes', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
+            'draft_lines.thickness' => ['sometimes', 'numeric', 'min:0.5', 'max:5.0'],
+            'draft_lines.offset' => ['sometimes', 'numeric', 'min:1.0', 'max:30.0'],
+            'draft_lines.padding_vertical' => ['sometimes', 'numeric', 'min:0', 'max:30'],
+            'draft_lines.paragraph_threshold' => ['sometimes', 'numeric', 'min:1.0', 'max:5.0'],
+            'draft_lines.ignore_headers_footers' => ['sometimes', 'boolean'],
+            'draft_lines.header_margin_percent' => ['sometimes', 'numeric', 'min:0', 'max:100'],
+            'draft_lines.footer_margin_percent' => ['sometimes', 'numeric', 'min:0', 'max:100'],
+            'draft_lines.target_pages' => ['sometimes', 'string', 'in:all_pages,first_page,custom'],
+            'draft_lines.custom_pages' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'draft_lines.line_style' => ['sometimes', 'string', 'in:solid,dashed'],
+            'draft_lines.dash_length' => ['sometimes', 'numeric', 'min:1.0', 'max:20.0'],
+            'draft_lines.dash_gap' => ['sometimes', 'numeric', 'min:1.0', 'max:20.0'],
 
-            $mergedDraft = array_merge($currentDraft, $request->input('draft_lines', []));
-            $mergedStamp = array_merge($currentStamp, $request->input('stamp', []));
+            'stamp' => ['sometimes', 'array'],
+            'stamp.notary_name' => ['sometimes', 'nullable', 'string', 'max:120'],
+            'stamp.city_title' => ['sometimes', 'nullable', 'string', 'max:120'],
+            'stamp.color' => ['sometimes', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
+            'stamp.font_family' => ['sometimes', 'string', 'in:Helvetica'],
+            'stamp.font_size_name' => ['sometimes', 'numeric', 'min:6.0', 'max:30.0'],
+            'stamp.font_size_city' => ['sometimes', 'numeric', 'min:5.0', 'max:24.0'],
+            'stamp.line_thickness' => ['sometimes', 'numeric', 'min:0.5', 'max:5.0'],
+            'stamp.line_length' => ['sometimes', 'numeric', 'min:50.0', 'max:500.0'],
+            'stamp.element_spacing' => ['sometimes', 'numeric', 'min:1.0', 'max:20.0'],
+            'stamp.target_pages' => ['sometimes', 'string', 'in:first_page,all_pages,custom'],
+            'stamp.custom_pages' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'stamp.preset' => ['sometimes', 'string', 'in:top_left,bottom_left,bottom_center,signature_area,custom'],
+            'stamp.x_percent' => ['sometimes', 'numeric', 'min:0', 'max:100'],
+            'stamp.y_percent' => ['sometimes', 'numeric', 'min:0', 'max:100'],
+        ]);
 
-            $document->update([
-                'draft_line_config' => $mergedDraft,
-                'stamp_config' => $mergedStamp,
-            ]);
-        }
+        $currentDraft = $document->draft_line_config
+            ?? config('notary.default_draft_lines');
+
+        $currentStamp = $document->stamp_config
+            ?? config('notary.default_stamp');
+
+        // Only allow known configuration keys.
+        $draftInput = array_intersect_key(
+            $validated['draft_lines'] ?? [],
+            config('notary.default_draft_lines')
+        );
+
+        $stampInput = array_intersect_key(
+            $validated['stamp'] ?? [],
+            config('notary.default_stamp')
+        );
+
+        $mergedDraft = array_merge($currentDraft, $draftInput);
+        $mergedStamp = array_merge($currentStamp, $stampInput);
 
         $sourcePdfAbs = $document->getPdfAbsolutePath();
         $finalRelativePath = "documents/final/{$document->uuid}_final.pdf";
@@ -401,11 +454,14 @@ class DocumentController extends Controller
                 $sourcePdfAbs,
                 $finalPdfAbs,
                 $document->layout_data ?? ['pages' => []],
-                $document->draft_line_config ?? [],
-                $document->stamp_config ?? []
+                $mergedDraft,
+                $mergedStamp
             );
 
+            // Persist settings only after PDF rendering succeeds.
             $document->update([
+                'draft_line_config' => $mergedDraft,
+                'stamp_config' => $mergedStamp,
                 'final_pdf_path' => $finalRelativePath,
                 'generated_at' => now(),
             ]);
