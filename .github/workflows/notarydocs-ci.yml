@@ -1,0 +1,98 @@
+name: NotaryDocs CI
+
+on:
+  push:
+    branches:
+      - fix/notarydocs-cpanel-hardening
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: notarydocs-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  php-validation:
+    name: PHP 8.3 - Laravel Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      APP_ENV: testing
+      APP_DEBUG: "false"
+      DB_CONNECTION: sqlite
+      DB_DATABASE: ":memory:"
+      CACHE_STORE: array
+      SESSION_DRIVER: array
+      QUEUE_CONNECTION: sync
+      MAIL_MAILER: array
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: mbstring, dom, fileinfo, gd, zip, pdo_sqlite
+          tools: composer:v2
+          coverage: none
+
+      - name: Validate Composer
+        run: composer validate --no-check-publish
+
+      - name: Install PHP dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Generate temporary test key
+        run: |
+          echo "APP_KEY=$(php -r 'echo "base64:".base64_encode(random_bytes(32));')" >> "$GITHUB_ENV"
+
+      - name: Check PHP syntax
+        run: |
+          php -l app/Http/Controllers/DocumentController.php
+          php -l app/Services/ClientPdfLayoutValidator.php
+          php -l app/Services/PdfRenderingService.php
+
+      - name: Test PDF rendering
+        run: vendor/bin/phpunit tests/Feature/DocumentRenderingTest.php
+
+  frontend-build:
+    name: Node 22 - Vite Production Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: npm ci --include=optional --no-audit --no-fund
+
+      - name: Build production assets
+        run: npm run build
+
+      - name: Verify Vite manifest
+        run: |
+          test -s public/build/manifest.json
+          echo "PASS: Production Vite manifest exists"
+
+      - name: Upload frontend build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: notarydocs-frontend-build
+          path: public/build/
+          if-no-files-found: error
+          retention-days: 7
