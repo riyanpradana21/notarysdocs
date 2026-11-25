@@ -3,6 +3,7 @@ name: NotaryDocs CI
 on:
   push:
     branches:
+      - main
       - fix/notarydocs-cpanel-hardening
   pull_request:
     branches:
