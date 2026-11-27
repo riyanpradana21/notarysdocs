@@ -1,0 +1,117 @@
+name: NotaryDocs Release Package
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Build Laravel Production Package
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Setup PHP 8.3
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: mbstring, dom, fileinfo, gd, zip, pdo_mysql, pdo_sqlite
+          tools: composer:v2
+          coverage: none
+
+      - name: Validate Composer
+        run: composer validate --no-check-publish
+
+      - name: Install production PHP dependencies
+        run: |
+          composer install \
+            --no-dev \
+            --prefer-dist \
+            --no-interaction \
+            --no-progress \
+            --optimize-autoloader
+
+      - name: Verify Laravel
+        run: |
+          test -s vendor/autoload.php
+          php artisan --version
+          php artisan route:list --except-vendor > /dev/null
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: npm ci --include=optional --no-audit --no-fund
+
+      - name: Build Vite
+        run: npm run build
+
+      - name: Verify frontend assets
+        run: |
+          test -s public/build/manifest.json
+          test -s public/vendor/pdfjs/pdf.min.mjs
+          test -s public/vendor/pdfjs/pdf.worker.min.mjs
+
+      - name: Assemble release package
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          RELEASE="$RUNNER_TEMP/notarydocs-release"
+          mkdir -p "$RELEASE" out
+
+          for item in \
+            artisan composer.json composer.lock \
+            app bootstrap config database \
+            public resources routes vendor
+          do
+            test -e "$item"
+            cp -a "$item" "$RELEASE/"
+          done
+
+          mkdir -p \
+            "$RELEASE/storage/app/private" \
+            "$RELEASE/storage/framework/cache/data" \
+            "$RELEASE/storage/framework/sessions" \
+            "$RELEASE/storage/framework/testing" \
+            "$RELEASE/storage/framework/views" \
+            "$RELEASE/storage/logs"
+
+          rm -f "$RELEASE/public/hot"
+
+          # Fail if the package unexpectedly contains secrets
+          test ! -e "$RELEASE/.env"
+          test ! -e "$RELEASE/.git"
+          test ! -e "$RELEASE/node_modules"
+
+          test -s "$RELEASE/vendor/autoload.php"
+          test -s "$RELEASE/public/build/manifest.json"
+
+          ARCHIVE="notarydocs-rc-${GITHUB_SHA:0:12}.tar.gz"
+
+          tar -czf "out/$ARCHIVE" -C "$RELEASE" .
+
+          (
+            cd out
+            sha256sum "$ARCHIVE" > "$ARCHIVE.sha256"
+          )
+
+          echo "========== RELEASE PACKAGE =========="
+          ls -lh out/
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: notarydocs-release-candidate
+          path: out/*
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
